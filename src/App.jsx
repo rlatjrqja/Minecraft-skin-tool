@@ -15,6 +15,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('3d'); // 3d | editor | wardrobe
   const [rightPanelTab, setRightPanelTab] = useState('wardrobe'); // wardrobe | extractor
   const [modelType, setModelType] = useState('classic'); // classic (Steve) | slim (Alex)
+  const [wardrobeRefreshKey, setWardrobeRefreshKey] = useState(0); // 워드로브 강제 갱신용
   
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [rotateSpeed, setRotateSpeed] = useState(1);
@@ -41,6 +42,12 @@ function App() {
   });
 
   const handleWardrobeChange = useCallback((selections) => {
+    // 삭제 이벤트 처리
+    if (selections._deleted) {
+      setWardrobeRefreshKey(k => k + 1);
+      return;
+    }
+
     setWardrobeSelections(selections);
     const canvas = editorRef.current?.getCanvas();
     if (!canvas) return;
@@ -49,7 +56,7 @@ function App() {
     // 의상 덧씌우기 전, 현재 체형의 기본 스킨으로 초기화
     drawDefaultSkin(ctx, modelType);
     
-    // 선택된 파츠 렌더링
+    // 내장 파츠 렌더링
     if (selections.head === 'creeper') {
       ctx.fillStyle = '#2d9c2d'; ctx.fillRect(8, 8, 8, 8);
       ctx.fillStyle = '#000000'; ctx.fillRect(9, 10, 2, 2); ctx.fillRect(13, 10, 2, 2);
@@ -69,17 +76,36 @@ function App() {
     }
     
     if (selections.sleeves === 'gauntlet') {
-      ctx.fillStyle = '#ffd700'; ctx.fillRect(44, 28, 4, 4); // Right Arm
+      ctx.fillStyle = '#ffd700'; ctx.fillRect(44, 28, 4, 4);
       ctx.fillStyle = '#b8860b'; ctx.fillRect(45, 29, 2, 2); 
     }
     
     if (selections.bottom === 'black_pants') {
       ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(0, 16, 16, 16);  // Right leg UV area
-      ctx.fillRect(16, 48, 16, 16); // Left leg UV area
+      ctx.fillRect(0, 16, 16, 16);
+      ctx.fillRect(16, 48, 16, 16);
     }
-    
-    editorRef.current.updateTexture(); 
+
+    // 커스텀(추출) 파츠 렌더링: _dataUrl 키가 있으면 해당 이미지를 캔버스에 덮어쓰기
+    const customPartKeys = Object.keys(selections).filter(k => k.endsWith('_dataUrl'));
+    if (customPartKeys.length > 0) {
+      let loadedCount = 0;
+      customPartKeys.forEach(key => {
+        const dataUrl = selections[key];
+        if (!dataUrl) return;
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, 64, 64);
+          loadedCount++;
+          if (loadedCount >= customPartKeys.length) {
+            editorRef.current?.updateTexture();
+          }
+        };
+        img.src = dataUrl;
+      });
+    } else {
+      editorRef.current.updateTexture();
+    }
   }, [modelType]);
 
   useEffect(() => {
@@ -276,13 +302,15 @@ function App() {
             </div>
 
             {rightPanelTab === 'wardrobe' && (
-              <Wardrobe onChange={handleWardrobeChange} />
+              <Wardrobe onChange={handleWardrobeChange} refreshKey={wardrobeRefreshKey} />
             )}
             {rightPanelTab === 'extractor' && (
               <SkinPartExtractorUI
-                onPartsExtracted={(result) => {
-                  console.log('Parts extracted:', result);
+                onPartsExtracted={(result, skinName) => {
+                  // 워드로브 갱신 트리거
+                  setWardrobeRefreshKey(k => k + 1);
                 }}
+                onSwitchToWardrobe={() => setRightPanelTab('wardrobe')}
               />
             )}
           </div>
