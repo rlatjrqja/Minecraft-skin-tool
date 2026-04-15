@@ -4,6 +4,7 @@ import { Download, Brush as BrushIcon, Eraser as EraserIcon, Hand as HandIcon, R
 import { ThreeViewer } from './components/ThreeViewer';
 import { CanvasEditor } from './components/CanvasEditor';
 import { Wardrobe } from './components/Wardrobe';
+import { SkinPartExtractorUI } from './components/SkinPartExtractorUI';
 import { drawDefaultSkin } from './utils/skinGenerator';
 import './index.css';
 
@@ -12,6 +13,7 @@ function App() {
   const [activeTool, setActiveTool] = useState('brush'); // brush | eraser
   const [currentColor, setCurrentColor] = useState('#66fcf1');
   const [activeTab, setActiveTab] = useState('3d'); // 3d | editor | wardrobe
+  const [rightPanelTab, setRightPanelTab] = useState('wardrobe'); // wardrobe | extractor
   const [modelType, setModelType] = useState('classic'); // classic (Steve) | slim (Alex)
   
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
@@ -35,7 +37,7 @@ function App() {
   };
 
   const [wardrobeSelections, setWardrobeSelections] = useState({
-    head: 'base', eyes: 'base', top: 'base', arm: 'base', pants: 'base'
+    hair: 'base', eyes: 'base', head: 'base', top: 'base', sleeves: 'base', bottom: 'base', shoes: 'base', accessory: 'base'
   });
 
   const handleWardrobeChange = useCallback((selections) => {
@@ -66,12 +68,12 @@ function App() {
       ctx.fillStyle = '#dd0000'; ctx.fillRect(23, 22, 2, 4);
     }
     
-    if (selections.arm === 'gauntlet') {
+    if (selections.sleeves === 'gauntlet') {
       ctx.fillStyle = '#ffd700'; ctx.fillRect(44, 28, 4, 4); // Right Arm
       ctx.fillStyle = '#b8860b'; ctx.fillRect(45, 29, 2, 2); 
     }
     
-    if (selections.pants === 'black_pants') {
+    if (selections.bottom === 'black_pants') {
       ctx.fillStyle = '#1a1a1a';
       ctx.fillRect(0, 16, 16, 16);  // Right leg UV area
       ctx.fillRect(16, 48, 16, 16); // Left leg UV area
@@ -255,7 +257,34 @@ function App() {
 
         <aside className="right-panel glass-panel">
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-            <Wardrobe onChange={handleWardrobeChange} />
+            {/* 오른쪽 패널 탭 전환 */}
+            <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+              <button
+                className={`tab ${rightPanelTab === 'wardrobe' ? 'active' : ''}`}
+                onClick={() => setRightPanelTab('wardrobe')}
+                style={{ flex: 1, fontSize: '0.8rem' }}
+              >
+                🎨 커스텀
+              </button>
+              <button
+                className={`tab ${rightPanelTab === 'extractor' ? 'active' : ''}`}
+                onClick={() => setRightPanelTab('extractor')}
+                style={{ flex: 1, fontSize: '0.8rem' }}
+              >
+                🧩 파츠 분해
+              </button>
+            </div>
+
+            {rightPanelTab === 'wardrobe' && (
+              <Wardrobe onChange={handleWardrobeChange} />
+            )}
+            {rightPanelTab === 'extractor' && (
+              <SkinPartExtractorUI
+                onPartsExtracted={(result) => {
+                  console.log('Parts extracted:', result);
+                }}
+              />
+            )}
           </div>
         </aside>
       </main>
