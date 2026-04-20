@@ -58,37 +58,7 @@ function App() {
     // 의상 덧씌우기 전, 현재 체형의 기본 스킨으로 초기화
     drawDefaultSkin(ctx, modelType);
     
-    // 내장 파츠 렌더링
-    if (selections.head === 'creeper') {
-      ctx.fillStyle = '#2d9c2d'; ctx.fillRect(8, 8, 8, 8);
-      ctx.fillStyle = '#000000'; ctx.fillRect(9, 10, 2, 2); ctx.fillRect(13, 10, 2, 2);
-      ctx.fillRect(11, 12, 2, 3); ctx.fillRect(10, 13, 1, 3); ctx.fillRect(13, 13, 1, 3);
-    }
-    
-    if (selections.eyes === 'sunglasses') {
-      ctx.fillStyle = '#111111';
-      ctx.fillRect(8, 12, 3, 2); ctx.fillRect(13, 12, 3, 2); ctx.fillRect(11, 12, 2, 1);
-      ctx.fillRect(6, 12, 2, 1); ctx.fillRect(16, 12, 2, 1);
-    }
-    
-    if (selections.top === 'suit') {
-      ctx.fillStyle = '#222222'; ctx.fillRect(20, 20, 8, 12);
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(23, 20, 2, 6);
-      ctx.fillStyle = '#dd0000'; ctx.fillRect(23, 22, 2, 4);
-    }
-    
-    if (selections.sleeves === 'gauntlet') {
-      ctx.fillStyle = '#ffd700'; ctx.fillRect(44, 28, 4, 4);
-      ctx.fillStyle = '#b8860b'; ctx.fillRect(45, 29, 2, 2); 
-    }
-    
-    if (selections.bottom === 'black_pants') {
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(0, 16, 16, 16);
-      ctx.fillRect(16, 48, 16, 16);
-    }
-
-    // 커스텀(추출) 파츠 렌더링: _dataUrl 키가 있으면 해당 이미지를 캔버스에 덮어쓰기
+    // 등록된 파츠 (public 폴더의 url 이미지 또는 LocalStorage의 base64 커스텀 파츠) 렌더링
     const customPartKeys = Object.keys(selections).filter(k => k.endsWith('_dataUrl'));
     if (customPartKeys.length > 0) {
       let loadedCount = 0;
@@ -97,7 +67,9 @@ function App() {
         if (!dataUrl) return;
         const img = new Image();
         img.onload = () => {
-          ctx.drawImage(img, 0, 0, 64, 64);
+          // 크기를 64x64로 강제 변환하면 64x32(구버전) 스킨 적용 시 위아래로 늘어나버리는 문제 발생
+          // 원래 크기 그대로 (1:1 픽셀 매칭) 덮어씌우도록 수정합니다.
+          ctx.drawImage(img, 0, 0);
           loadedCount++;
           if (loadedCount >= customPartKeys.length) {
             editorRef.current?.updateTexture();

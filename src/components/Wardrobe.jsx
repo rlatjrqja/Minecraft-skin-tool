@@ -4,21 +4,28 @@ import { getCustomOptionsForPart, deleteCustomSkin, getSavedSkinNames } from '..
 
 export const BASE_CATEGORIES = [
   // --- 캐릭터 외형 ---
-  { id: 'hair',      label: '헤어스타일', icon: '💇', group: 'appearance', options: [{id: 'base', name: '기본 헤어'}] },
-  { id: 'eyes',      label: '눈 모양',    icon: '👁', group: 'appearance', options: [{id: 'base', name: '기본 눈'}, {id: 'sunglasses', name: '선글라스'}] },
-  { id: 'mouth',     label: '입모양',    icon: '👄', group: 'appearance', options: [{id: 'base', name: '기본 입'}] },
-  { id: 'top',       label: '상의',      icon: '👕', group: 'appearance', options: [{id: 'base', name: '기본 상의'}, {id: 'suit', name: '정장 자켓'}] },
-  { id: 'sleeves',   label: '소매',      icon: '💪', group: 'appearance', options: [{id: 'base', name: '기본 소매'}, {id: 'gauntlet', name: '타노스 건틀렛'}] },
-  { id: 'bottom',    label: '하의',      icon: '👖', group: 'appearance', options: [{id: 'base', name: '기본 하의'}, {id: 'black_pants', name: '검은색 바지'}] },
-  { id: 'shoes',     label: '신발',      icon: '👟', group: 'appearance', options: [{id: 'base', name: '기본 신발'}] },
+  // 아래 주석 처리된 예시처럼, public 폴더에 파츠 PNG 파일을 넣고 url 속성을 추가하여 기본 선택지를 추가할 수 있습니다.
+  // 예시: { id: 'cool_jacket', name: '멋진 자켓', url: '/parts/top/cool_jacket.png' }
+  { id: 'hair', label: '헤어스타일', icon: '💇', group: 'appearance', options: [{ id: 'base', name: '기본 헤어' }] },
+  { id: 'eyes', label: '눈 모양', icon: '👁', group: 'appearance', options: [{ id: 'base', name: '기본 눈' }] },
+  { id: 'mouth', label: '입모양', icon: '👄', group: 'appearance', options: [{ id: 'base', name: '기본 입' }] },
+  { id: 'top', label: '상의', icon: '👕', group: 'appearance', options: [{ id: 'base', name: '기본 상의' }] },
+  { id: 'sleeves', label: '소매', icon: '💪', group: 'appearance', options: [{ id: 'base', name: '기본 소매' }] },
+  { id: 'bottom', label: '하의', icon: '👖', group: 'appearance', options: [{ id: 'base', name: '기본 하의' }] },
+  { id: 'shoes', label: '신발', icon: '👟', group: 'appearance', options: [{ id: 'base', name: '기본 신발' }] },
   // --- 장신구 ---
-  { id: 'hat',       label: '모자',      icon: '🎩', group: 'accessory', options: [{id: 'base', name: '없음'}] },
-  { id: 'eye_accessory', label: '눈장식', icon: '🕶', group: 'accessory', options: [{id: 'base', name: '없음'}] },
-  { id: 'ear_accessory', label: '귀장식', icon: '👂', group: 'accessory', options: [{id: 'base', name: '없음'}] },
-  { id: 'shoulder_accessory', label: '어깨장식', icon: '🎗', group: 'accessory', options: [{id: 'base', name: '없음'}] },
-  { id: 'necklace',  label: '목걸이',    icon: '📿', group: 'accessory', options: [{id: 'base', name: '없음'}] },
-  { id: 'arm_accessory', label: '팔 장식', icon: '⌚', group: 'accessory', options: [{id: 'base', name: '없음'}] },
-  { id: 'leg_accessory', label: '다리장식', icon: '🐾', group: 'accessory', options: [{id: 'base', name: '없음'}] },
+  {
+    id: 'hat', label: '모자', icon: '🎩', group: 'accessory', options: [
+      { id: 'base', name: '없음' },
+      { id: 'roasted_chestnut_hat', name: '군밤모자', url: '/assets/parts/hat/Roasted chestnut hat.png' }
+    ]
+  },
+  { id: 'eye_accessory', label: '눈장식', icon: '🕶', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'ear_accessory', label: '귀장식', icon: '👂', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'shoulder_accessory', label: '어깨장식', icon: '🎗', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'necklace', label: '목걸이', icon: '📿', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'arm_accessory', label: '팔 장식', icon: '⌚', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'leg_accessory', label: '다리장식', icon: '🐾', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
 ];
 
 /**
@@ -66,8 +73,9 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
       const idx = selections[cat.id] ?? 0;
       const opt = cat.options[idx];
       selectedIds[cat.id] = opt?.id ?? 'base';
-      if (opt?.isCustom && opt?.dataUrl) {
-        selectedIds[`${cat.id}_dataUrl`] = opt.dataUrl;
+      // url (public 디렉토리 정적 파일) 혹은 dataUrl (커스텀 Base64) 정보가 있으면 _dataUrl 키로 전달합니다.
+      if (opt?.url || opt?.dataUrl) {
+        selectedIds[`${cat.id}_dataUrl`] = opt.url || opt.dataUrl;
       }
     });
     onChange(selectedIds);
@@ -98,7 +106,7 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
     const currentOption = cat.options[selections[cat.id] || 0] || cat.options[0];
     const hasMultipleOptions = cat.options.length > 1;
     const isCustomOption = currentOption?.isCustom;
-    
+
     return (
       <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -107,22 +115,22 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
             {cat.options.length}종
           </span>
         </span>
-        <div style={{ 
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           backgroundColor: hasMultipleOptions ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)',
           padding: '5px 8px', borderRadius: '8px',
           opacity: hasMultipleOptions ? 1 : 0.6,
           border: isCustomOption ? '1px solid rgba(102, 252, 241, 0.25)' : '1px solid transparent',
         }}>
-          <button 
-            className="btn-icon" 
-            onClick={() => handlePrev(cat.id)} 
+          <button
+            className="btn-icon"
+            onClick={() => handlePrev(cat.id)}
             style={{ padding: '5px', backgroundColor: 'rgba(255,255,255,0.05)' }}
             disabled={!hasMultipleOptions}
           >
             <ChevronLeft size={18} />
           </button>
-          
+
           <div style={{ flex: 1, textAlign: 'center', userSelect: 'none', minWidth: 0 }}>
             <div style={{ fontSize: '0.82rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {currentOption.name}
@@ -133,10 +141,10 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
               </div>
             )}
           </div>
-          
-          <button 
-            className="btn-icon" 
-            onClick={() => handleNext(cat.id)} 
+
+          <button
+            className="btn-icon"
+            onClick={() => handleNext(cat.id)}
             style={{ padding: '5px', backgroundColor: 'rgba(255,255,255,0.05)' }}
             disabled={!hasMultipleOptions}
           >
@@ -149,10 +157,10 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
 
   return (
     <div className="wardrobe-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
-      
+
       {/* 캐릭터 외형 섹션 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ 
+        <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px'
         }}>
@@ -166,7 +174,7 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
 
       {/* 장신구 섹션 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-        <div style={{ 
+        <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
           borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px'
         }}>
@@ -180,15 +188,15 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
 
       {/* 저장된 커스텀 스킨 관리 */}
       {getSavedSkinNames().length > 0 && (
-        <div style={{ 
+        <div style={{
           marginTop: '8px', padding: '10px', borderRadius: '8px',
-          backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)' 
+          backgroundColor: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.05)'
         }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '6px', opacity: 0.7 }}>
             저장된 스킨 파츠
           </div>
           {getSavedSkinNames().map(name => (
-            <div key={name} style={{ 
+            <div key={name} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '4px 6px', borderRadius: '4px', marginBottom: '2px',
               fontSize: '0.78rem', color: 'var(--text-secondary)',
