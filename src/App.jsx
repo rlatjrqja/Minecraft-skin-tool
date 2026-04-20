@@ -5,6 +5,7 @@ import { ThreeViewer } from './components/ThreeViewer';
 import { CanvasEditor } from './components/CanvasEditor';
 import { Wardrobe } from './components/Wardrobe';
 import { SkinPartExtractorUI } from './components/SkinPartExtractorUI';
+import { PartEditor } from './components/PartEditor';
 import { drawDefaultSkin } from './utils/skinGenerator';
 import './index.css';
 
@@ -16,6 +17,7 @@ function App() {
   const [rightPanelTab, setRightPanelTab] = useState('wardrobe'); // wardrobe | extractor
   const [modelType, setModelType] = useState('classic'); // classic (Steve) | slim (Alex)
   const [wardrobeRefreshKey, setWardrobeRefreshKey] = useState(0); // 워드로브 강제 갱신용
+  const [partEditorProps, setPartEditorProps] = useState(null);
   
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [rotateSpeed, setRotateSpeed] = useState(1);
@@ -230,6 +232,15 @@ function App() {
               >
                 2D 에디터
               </button>
+              {partEditorProps && (
+                <button 
+                  className={`tab ${activeTab === 'part-editor' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('part-editor')}
+                  style={{ color: '#66fcf1', borderBottomColor: activeTab === 'part-editor' ? '#66fcf1' : 'transparent' }}
+                >
+                  🧩 파츠 수정
+                </button>
+              )}
             </div>
 
             <div style={{ flex: 1, position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
@@ -258,6 +269,13 @@ function App() {
                     />
                  </div>
               </div>
+
+              {/* 파츠 수정 에디터 */}
+              {partEditorProps && (
+                <div style={{ display: activeTab === 'part-editor' ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, flexDirection: 'column', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                  <PartEditor {...partEditorProps} />
+                </div>
+              )}
 
             </div>
 
@@ -311,6 +329,14 @@ function App() {
                   setWardrobeRefreshKey(k => k + 1);
                 }}
                 onSwitchToWardrobe={() => setRightPanelTab('wardrobe')}
+                openPartEditor={(props) => {
+                  setPartEditorProps(props);
+                  setActiveTab('part-editor');
+                }}
+                closePartEditor={() => {
+                  setPartEditorProps(null);
+                  setActiveTab('3d');
+                }}
               />
             )}
           </div>

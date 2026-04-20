@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Loader2, CheckCircle, AlertCircle, Download, Plus, ArrowRight } from 'lucide-react';
 import { extractSkinParts, getExtractionPreview } from '../utils/skinPartExtractor';
 import { saveExtractedParts } from '../utils/partsStorage';
+import { PartEditor } from './PartEditor';
 
 /**
  * data URL을 Blob으로 변환합니다.
@@ -20,8 +21,9 @@ function dataUrlToBlob(dataUrl) {
 /**
  * 스킨 업로드 → 파츠 분해 → 워드로브에 자동 추가하는 컴포넌트
  */
-export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe }) {
+export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, openPartEditor, closePartEditor }) {
   const [status, setStatus] = useState('idle'); // idle | loading | success | error
+  const [editingPartId, setEditingPartId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [extractionResult, setExtractionResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -49,18 +51,16 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe }) {
       const result = await extractSkinParts(file);
       const previewData = getExtractionPreview(result);
 
+      // 전체 결과 저장
       setExtractionResult({ ...result, previewData });
 
       // 파일명에서 확장자를 제거하여 스킨 이름으로 사용
       const skinName = file.name.replace(/\.[^.]+$/, '') || `skin_${Date.now()}`;
       setSavedSkinName(skinName);
 
-      // localStorage에 자동 저장
       const saved = saveExtractedParts(skinName, previewData);
-
       setStatus('success');
 
-      // 부모 컴포넌트에 알림 (워드로브 갱신 트리거)
       if (onPartsExtracted) {
         onPartsExtracted(result, skinName);
       }
@@ -68,12 +68,43 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe }) {
       if (!saved) {
         setErrorMessage('파츠 저장에 실패했습니다 (저장 공간 부족 가능).');
       }
+
     } catch (err) {
       setStatus('error');
       setErrorMessage(err.message || '스킨 분석 중 오류가 발생했습니다.');
       console.error('Skin extraction error:', err);
     }
   }, [onPartsExtracted]);
+
+  // PartEditor 편집 완료 후 대시보드 복귀
+  const handleEditorClose = useCallback(() => {
+    setStatus('loading');
+    setEditingPartId(null);
+    
+    // UI 렌더링 딜레이를 위해 약간 지연
+    setTimeout(() => {
+      try {
+        // 이미 캔버스가 업데이트 되었으므로 previewData만 재생성
+        const previewData = getExtractionPreview(extractionResult);
+        setExtractionResult(prev => ({ ...prev, previewData }));
+
+        const saved = saveExtractedParts(savedSkinName, previewData);
+        setStatus('success');
+
+        if (onPartsExtracted) {
+          onPartsExtracted(extractionResult, savedSkinName);
+        }
+
+        if (!saved) {
+          setErrorMessage('파츠 저장에 실패했습니다 (저장 공간 부족 가능).');
+        }
+      } catch (err) {
+        setStatus('error');
+        setErrorMessage('결과 업데이트 중 오류가 발생했습니다.');
+        console.error(err);
+      }
+    }, 50);
+  }, [extractionResult, savedSkinName, onPartsExtracted]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
@@ -106,6 +137,21 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe }) {
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   }, []);
+
+  const startEditingPart = (partId) => {
+    setEditingPartId(partId);
+    if (!openPartEditor || !extractionResult) return;
+    
+    const editingPart = extractionResult.parts.find(p => p.partId === partId);
+    openPartEditor({
+      part: editingPart,
+      skinCanvas: extractionResult.skinCanvas,
+      onComplete: () => {
+        handleEditorClose();
+        if (closePartEditor) closePartEditor();
+      }
+    });
+  };
 
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -257,52 +303,66 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe }) {
             </div>
           </div>
 
-          {/* 추출된 파츠 목록 */}
+          {/* 추출된 파츠 목록 (14종) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <h4 style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
               추출된 파츠 ({extractionResult.previewData.length}개)
             </h4>
             
-            {extractionResult.previewData.map((part) => (
-              <div
-                key={part.partId}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  padding: '6px 8px', borderRadius: '6px',
-                  backgroundColor: 'rgba(0,0,0,0.25)',
-                  border: '1px solid rgba(255,255,255,0.04)',
-                }}
-              >
-                <img
-                  src={part.croppedDataUrl}
-                  alt={part.label}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+              {extractionResult.previewData.map((part) => (
+                <div
+                  key={part.partId}
                   style={{
-                    width: '30px', height: '30px',
-                    imageRendering: 'pixelated',
-                    borderRadius: '3px',
-                    backgroundColor: 'rgba(0,0,0,0.5)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    objectFit: 'contain',
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    padding: '6px', borderRadius: '6px',
+                    backgroundColor: 'rgba(0,0,0,0.25)',
+                    border: '1px solid rgba(255,255,255,0.04)',
                   }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {part.label}
-                  </div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', opacity: 0.6 }}>
-                    신뢰도: {part.confidence}
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDownloadPart(part.croppedDataUrl, part.partId); }}
-                  className="btn-icon"
-                  style={{ padding: '3px', opacity: 0.5 }}
-                  title={`${part.label} PNG 다운로드`}
                 >
-                  <Download size={13} />
-                </button>
-              </div>
-            ))}
+                  <img
+                    src={part.croppedDataUrl}
+                    alt={part.label}
+                    style={{
+                      width: '24px', height: '24px',
+                      imageRendering: 'pixelated',
+                      borderRadius: '3px',
+                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      objectFit: 'contain',
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {part.label}
+                    </div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', opacity: 0.6 }}>
+                      신뢰도: {part.confidence}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); startEditingPart(part.partId); }}
+                    style={{ 
+                      padding: '4px 8px', borderRadius: '4px', backgroundColor: 'rgba(102, 252, 241, 0.1)', 
+                      color: '#66fcf1', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px', 
+                      cursor: 'pointer', border: '1px solid rgba(102, 252, 241, 0.3)', transition: 'all 0.2s' 
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 252, 241, 0.2)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 252, 241, 0.1)'}
+                  >
+                    ✏️ 편집
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDownloadPart(part.croppedDataUrl, part.partId); }}
+                    className="btn-icon"
+                    style={{ padding: '3px', opacity: 0.5 }}
+                    title={`${part.label} 다운로드`}
+                  >
+                    <Download size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
