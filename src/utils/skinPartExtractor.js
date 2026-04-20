@@ -362,23 +362,259 @@ function isSkinTone(hex) {
 }
 
 
-// ─── 메인 파츠 추출 알고리즘 ───
+// ─── 개선된 헬퍼 함수 ───
+
+/**
+ * 얼굴 앞면에서 피부색을 정밀하게 감지합니다.
+ * 전략: 앞면의 하단 2행(턱/입 영역)은 거의 항상 피부색이므로 여기서 샘플링합니다.
+ * 추가로 좌/우 측면 하단도 교차 검증합니다.
+ */
+function detectSkinColor(ctx) {
+  const front = PART_REGIONS.head.faces.front; // {x:8, y:8, w:8, h:8}
+  
+  // 1차: 앞면 하단 2행 (y=14~15, UV에서 턱/입 영역)
+  const chinRegion = { x: front.x, y: front.y + 6, w: front.w, h: 2 };
+  const chinAnalysis = analyzeRegionColors(ctx, chinRegion);
+  
+  // 2차: 앞면 양쪽 끝 세로줄 (x=8, x=15, y=10~15) - 보통 피부
+  const sidePixels = [];
+  const fullData = ctx.getImageData(front.x, front.y, front.w, front.h).data;
+  for (let row = 2; row < 8; row++) {
+    // 좌측 끝 (x=0 in local)
+    const leftIdx = (row * front.w + 0) * 4;
+    if (fullData[leftIdx + 3] > 0) {
+      sidePixels.push(rgbToHex(fullData[leftIdx], fullData[leftIdx + 1], fullData[leftIdx + 2]));
+    }
+    // 우측 끝 (x=7 in local)
+    const rightIdx = (row * front.w + (front.w - 1)) * 4;
+    if (fullData[rightIdx + 3] > 0) {
+      sidePixels.push(rgbToHex(fullData[rightIdx], fullData[rightIdx + 1], fullData[rightIdx + 2]));
+    }
+  }
+
+  // 3차: 좌/우 측면의 하단 영역
+  const rightFace = PART_REGIONS.head.faces.right;
+  const rightBottom = analyzeRegionColors(ctx, { x: rightFace.x, y: rightFace.y + 5, w: rightFace.w, h: 3 });
+  const leftFace = PART_REGIONS.head.faces.left;
+  const leftBottom = analyzeRegionColors(ctx, { x: leftFace.x, y: leftFace.y + 5, w: leftFace.w, h: 3 });
+
+  // 후보 색상 수집 및 투표
+  const votes = new Map();
+  const addVotes = (color, weight) => {
+    votes.set(color, (votes.get(color) || 0) + weight);
+  };
+
+  addVotes(chinAnalysis.dominantColor, 5);
+  sidePixels.forEach(c => addVotes(c, 1));
+  addVotes(rightBottom.dominantColor, 2);
+  addVotes(leftBottom.dominantColor, 2);
+
+  // 가장 많은 표를 얻은 색상 = 피부색
+  let bestColor = chinAnalysis.dominantColor;
+  let bestVotes = 0;
+
+  // 유사한 색상끼리 그룹핑 (거리 25 이내)
+  const colorGroups = [];
+  for (const [color, weight] of votes) {
+    let merged = false;
+    for (const group of colorGroups) {
+      if (colorDistance(color, group.representative) < 25) {
+        group.total += weight;
+        if (weight > group.maxWeight) {
+          group.maxWeight = weight;
+          group.representative = color;
+        }
+        merged = true;
+        break;
+      }
+    }
+    if (!merged) {
+      colorGroups.push({ representative: color, total: weight, maxWeight: weight });
+    }
+  }
+
+  colorGroups.sort((a, b) => b.total - a.total);
+  if (colorGroups.length > 0) {
+    bestColor = colorGroups[0].representative;
+  }
+
+  return {
+    skinColor: bestColor,
+    skinColorRgb: hexToRgb(bestColor),
+    confidence: colorGroups.length > 0 ? Math.min(colorGroups[0].total / 15, 1.0) : 0,
+  };
+}
+
+/**
+ * 피부색과 비피부색을 최적으로 분리하는 적응형 임계값을 계산합니다.
+ * 오츠(Otsu) 방식 변형: 머리 앞면의 모든 픽셀을 피부 거리로 정렬한 뒤 최적 분리점을 찾음.
+ */
+function computeAdaptiveThreshold(ctx, skinColor) {
+  const front = PART_REGIONS.head.faces.front;
+  const data = ctx.getImageData(front.x, front.y, front.w, front.h).data;
+  
+  const distances = [];
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) continue;
+    const hex = rgbToHex(data[i], data[i + 1], data[i + 2]);
+    distances.push(colorDistance(hex, skinColor));
+  }
+
+  if (distances.length === 0) return 60; // fallback
+
+  distances.sort((a, b) => a - b);
+
+  // 간격이 가장 큰 곳을 분리점으로 선택 (bimodal 분포의 골)
+  let bestGap = 0;
+  let bestThreshold = 60;
+
+  for (let i = 1; i < distances.length; i++) {
+    const gap = distances[i] - distances[i - 1];
+    if (gap > bestGap && distances[i] > 15) { // 최소 15 이상에서만
+      bestGap = gap;
+      bestThreshold = (distances[i - 1] + distances[i]) / 2;
+    }
+  }
+
+  // 합리적 범위로 클램프
+  return Math.max(20, Math.min(bestThreshold, 120));
+}
+
+/**
+ * 머리 앞면의 픽셀을 행 단위로 분석합니다.
+ * 각 행의 비피부색 패턴을 기반으로 헤어/눈/코/입 영역을 추정합니다.
+ * 
+ * 반환값: 8x8 그리드의 각 픽셀에 대한 분류 맵
+ *   'skin' = 피부, 'hair' = 머리카락, 'eye' = 눈, 'feature' = 코/입 등
+ */
+function classifyHeadFrontPixels(ctx, skinColor, threshold) {
+  const front = PART_REGIONS.head.faces.front;
+  const data = ctx.getImageData(front.x, front.y, front.w, front.h).data;
+  const w = front.w; // 8
+  const h = front.h; // 8
+
+  // 1단계: 각 픽셀을 피부/비피부로 1차 분류
+  const grid = Array.from({ length: h }, () => Array(w).fill('skin'));
+  const pixelColors = Array.from({ length: h }, () => Array(w).fill(null));
+  const distMap = Array.from({ length: h }, () => Array(w).fill(0));
+  
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+      
+      if (a === 0) {
+        grid[y][x] = 'transparent';
+        continue;
+      }
+
+      const hex = rgbToHex(r, g, b);
+      pixelColors[y][x] = hex;
+      const dist = colorDistance(hex, skinColor);
+      distMap[y][x] = dist;
+      
+      if (dist > threshold) {
+        grid[y][x] = 'non-skin';
+      }
+    }
+  }
+
+  // 2단계: 행 패턴 분석으로 의미 부여
+  // 머리 앞면 8행의 일반적인 구조:
+  //   행 0-1: 이마/앞머리 (높은 확률로 헤어)
+  //   행 2-3: 이마~눈 위 전환 영역
+  //   행 4-5: 눈 영역 (주요 인식 대상)
+  //   행 6-7: 코/입/턱 (대부분 피부)
+
+  // 각 행의 비피부 픽셀 수 계산
+  const rowNonSkinCount = [];
+  for (let y = 0; y < h; y++) {
+    let count = 0;
+    for (let x = 0; x < w; x++) {
+      if (grid[y][x] === 'non-skin') count++;
+    }
+    rowNonSkinCount.push(count);
+  }
+
+  // 눈 행 탐지: 비피부 픽셀이 2~6개인 행 중, 좌우 대칭성이 있는 행
+  let eyeRows = [];
+  for (let y = 2; y < 7; y++) { // 행 2~6에서만 찾음
+    if (rowNonSkinCount[y] >= 2 && rowNonSkinCount[y] <= 6) {
+      // 대칭성 검사: 좌측(x=0~3)과 우측(x=4~7)에 비슷한 패턴
+      let leftNS = 0, rightNS = 0;
+      for (let x = 0; x < 4; x++) { if (grid[y][x] === 'non-skin') leftNS++; }
+      for (let x = 4; x < 8; x++) { if (grid[y][x] === 'non-skin') rightNS++; }
+      
+      const symmetryScore = 1 - Math.abs(leftNS - rightNS) / Math.max(leftNS + rightNS, 1);
+      
+      if (symmetryScore >= 0.3) { // 약간의 대칭이라도 있으면
+        eyeRows.push({ y, symmetryScore, nonSkinCount: rowNonSkinCount[y] });
+      }
+    }
+  }
+
+  // 눈 행이 여러 개면 연속된 1~3행을 선택 (보통 눈은 1~2행 차지)
+  let bestEyeBlock = [];
+  if (eyeRows.length > 0) {
+    // 연속된 행 블록 찾기
+    let currentBlock = [eyeRows[0]];
+    for (let i = 1; i < eyeRows.length; i++) {
+      if (eyeRows[i].y - eyeRows[i - 1].y <= 1) {
+        currentBlock.push(eyeRows[i]);
+      } else {
+        if (currentBlock.length > bestEyeBlock.length) bestEyeBlock = currentBlock;
+        currentBlock = [eyeRows[i]];
+      }
+    }
+    if (currentBlock.length > bestEyeBlock.length) bestEyeBlock = currentBlock;
+    
+    // 최대 3행까지만
+    if (bestEyeBlock.length > 3) {
+      // 대칭 점수 상위 3개 선택
+      bestEyeBlock.sort((a, b) => b.symmetryScore - a.symmetryScore);
+      bestEyeBlock = bestEyeBlock.slice(0, 3);
+    }
+  }
+
+  const eyeRowSet = new Set(bestEyeBlock.map(e => e.y));
+
+  // 3단계: 최종 분류
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (grid[y][x] === 'skin' || grid[y][x] === 'transparent') continue;
+
+      if (eyeRowSet.has(y)) {
+        grid[y][x] = 'eye';
+      } else if (y <= 3) {
+        // 상단 4행의 비피부 = 머리카락 (행 전체가 비피부이거나 대부분)
+        grid[y][x] = 'hair';
+      } else if (y >= 6) {
+        // 하단 2행의 비피부 = 코/입 등 얼굴 특징 (눈이 아닌 경우)
+        grid[y][x] = 'feature';
+      } else {
+        // 중간 영역의 비피부 중 눈이 아닌 것 = 머리카락 또는 장식
+        // 위쪽 행에 헤어가 많으면 헤어로, 아니면 특징으로
+        const aboveHairCount = y > 0 ? grid[y - 1].filter(c => c === 'hair').length : 0;
+        grid[y][x] = aboveHairCount >= 3 ? 'hair' : 'feature';
+      }
+    }
+  }
+
+  return { grid, pixelColors, distMap, eyeRowSet };
+}
+
+
+// ─── 메인 파츠 추출 알고리즘 (개선된 버전) ───
 
 /**
  * 머리 영역에서 헤어스타일을 추출합니다.
- * 전략: 피부색이 아닌 픽셀을 "머리카락"으로 분류
- * 
- * @param {CanvasRenderingContext2D} ctx - 소스 스킨 캔버스
- * @returns {{ canvas: HTMLCanvasElement, confidence: number, info: object }}
+ * 개선: 적응형 임계값 + 행별 분류 + 연결 성분 기반
  */
-function extractHair(ctx) {
+function extractHair(ctx, skinInfo, frontClassification) {
   const headFaces = PART_REGIONS.head.faces;
+  const { skinColor } = skinInfo;
+  const threshold = skinInfo.threshold;
   
-  // 1. 먼저 얼굴 앞면에서 피부색을 감지
-  const faceAnalysis = analyzeRegionColors(ctx, headFaces.front);
-  const skinColor = faceAnalysis.dominantColor;
-  
-  // 2. 머리카락 = 머리 전체 영역 중 피부색이 아닌 영역
   const hairCanvas = document.createElement('canvas');
   hairCanvas.width = 64;
   hairCanvas.height = 64;
@@ -387,39 +623,108 @@ function extractHair(ctx) {
   let hairPixelCount = 0;
   let totalHeadPixels = 0;
 
-  // 모든 머리 면을 순회하며 비피부색 픽셀을 추출
-  Object.values(headFaces).forEach(face => {
-    const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
-    const newData = hairCtx.createImageData(face.w, face.h);
-    const src = imageData.data;
-    const dst = newData.data;
+  // ── 앞면: 분류 결과에서 'hair'로 분류된 픽셀만 추출 ──
+  const front = headFaces.front;
+  const frontData = ctx.getImageData(front.x, front.y, front.w, front.h);
+  const newFrontData = hairCtx.createImageData(front.w, front.h);
+  const { grid } = frontClassification;
 
-    for (let i = 0; i < src.length; i += 4) {
-      const r = src[i], g = src[i + 1], b = src[i + 2], a = src[i + 3];
+  for (let y = 0; y < front.h; y++) {
+    for (let x = 0; x < front.w; x++) {
+      const idx = (y * front.w + x) * 4;
       totalHeadPixels++;
-      
-      if (a === 0) continue;
-      
-      const pixelHex = rgbToHex(r, g, b);
-      const distToSkin = colorDistance(pixelHex, skinColor);
-      
-      // 피부색과 충분히 다른 색상 → 머리카락 또는 장식
-      if (distToSkin > 60) {
-        dst[i] = r; dst[i + 1] = g; dst[i + 2] = b; dst[i + 3] = a;
+      if (grid[y][x] === 'hair') {
+        newFrontData.data[idx] = frontData.data[idx];
+        newFrontData.data[idx + 1] = frontData.data[idx + 1];
+        newFrontData.data[idx + 2] = frontData.data[idx + 2];
+        newFrontData.data[idx + 3] = frontData.data[idx + 3];
         hairPixelCount++;
       }
     }
+  }
+  hairCtx.putImageData(newFrontData, front.x, front.y);
 
-    hairCtx.putImageData(newData, face.x, face.y);
+  // ── 위면(top face): 전체가 보통 머리카락 ──
+  const topFace = headFaces.top;
+  const topData = ctx.getImageData(topFace.x, topFace.y, topFace.w, topFace.h);
+  const newTopData = hairCtx.createImageData(topFace.w, topFace.h);
+  for (let i = 0; i < topData.data.length; i += 4) {
+    if (topData.data[i + 3] === 0) continue;
+    const hex = rgbToHex(topData.data[i], topData.data[i + 1], topData.data[i + 2]);
+    const dist = colorDistance(hex, skinColor);
+    // 위면에서 피부색이 아닌 것 = 머리카락 (머리 꼭대기)
+    // 비피부이거나, 임계값의 절반 이상이면 머리카락으로
+    if (dist > threshold * 0.5) {
+      newTopData.data[i] = topData.data[i];
+      newTopData.data[i + 1] = topData.data[i + 1];
+      newTopData.data[i + 2] = topData.data[i + 2];
+      newTopData.data[i + 3] = topData.data[i + 3];
+      hairPixelCount++;
+    }
+    totalHeadPixels++;
+  }
+  hairCtx.putImageData(newTopData, topFace.x, topFace.y);
+
+  // ── 뒷면(back face): 대부분 머리카락 ──
+  const backFace = headFaces.back;
+  const backData = ctx.getImageData(backFace.x, backFace.y, backFace.w, backFace.h);
+  const newBackData = hairCtx.createImageData(backFace.w, backFace.h);
+  for (let i = 0; i < backData.data.length; i += 4) {
+    if (backData.data[i + 3] === 0) continue;
+    const hex = rgbToHex(backData.data[i], backData.data[i + 1], backData.data[i + 2]);
+    const dist = colorDistance(hex, skinColor);
+    if (dist > threshold * 0.4) { // 뒷면은 더 관대하게
+      newBackData.data[i] = backData.data[i];
+      newBackData.data[i + 1] = backData.data[i + 1];
+      newBackData.data[i + 2] = backData.data[i + 2];
+      newBackData.data[i + 3] = backData.data[i + 3];
+      hairPixelCount++;
+    }
+    totalHeadPixels++;
+  }
+  hairCtx.putImageData(newBackData, backFace.x, backFace.y);
+
+  // ── 좌/우 측면: 상단부는 머리카락, 하단부는 피부 ──
+  ['right', 'left'].forEach(side => {
+    const face = headFaces[side];
+    const sideData = ctx.getImageData(face.x, face.y, face.w, face.h);
+    const newSideData = hairCtx.createImageData(face.w, face.h);
+
+    for (let y = 0; y < face.h; y++) {
+      for (let x = 0; x < face.w; x++) {
+        const idx = (y * face.w + x) * 4;
+        totalHeadPixels++;
+        if (sideData.data[idx + 3] === 0) continue;
+
+        const hex = rgbToHex(sideData.data[idx], sideData.data[idx + 1], sideData.data[idx + 2]);
+        const dist = colorDistance(hex, skinColor);
+        
+        // 상단일수록 머리카락일 확률 높음 (가중치 적용)
+        const rowWeight = 1.0 - (y / face.h) * 0.5; // 상단=1.0, 하단=0.5
+        
+        if (dist > threshold * rowWeight * 0.7) {
+          newSideData.data[idx] = sideData.data[idx];
+          newSideData.data[idx + 1] = sideData.data[idx + 1];
+          newSideData.data[idx + 2] = sideData.data[idx + 2];
+          newSideData.data[idx + 3] = sideData.data[idx + 3];
+          hairPixelCount++;
+        }
+      }
+    }
+    hairCtx.putImageData(newSideData, face.x, face.y);
   });
 
-  // 오버레이 레이어도 확인 (모자/헬멧 등)
+  // ── 오버레이 레이어 (모자/헬멧) ──
   const headOverlay = PART_REGIONS.head.overlay;
   Object.values(headOverlay).forEach(face => {
     if (!isRegionEmpty(ctx, face)) {
       const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
       hairCtx.putImageData(imageData, face.x, face.y);
-      hairPixelCount += face.w * face.h; // 오버레이가 있으면 장식으로 취급
+      
+      const d = imageData.data;
+      for (let i = 3; i < d.length; i += 4) {
+        if (d[i] > 0) hairPixelCount++;
+      }
     }
   });
 
@@ -432,6 +737,7 @@ function extractHair(ctx) {
     confidence,
     info: {
       detectedSkinColor: skinColor,
+      adaptiveThreshold: threshold,
       hairPixels: hairPixelCount,
       totalPixels: totalHeadPixels,
       hasOverlay: Object.values(headOverlay).some(face => !isRegionEmpty(ctx, face)),
@@ -441,60 +747,73 @@ function extractHair(ctx) {
 
 /**
  * 눈 영역을 추출합니다.
- * 전략: 머리 앞면(8,8 ~ 16,16)의 중간 행(y=11~14)에서 흰색/밝은색 + 어두운색 패턴을 감지
+ * 개선: 고정 행이 아닌 전체 앞면에서 대칭 패턴 탐색
  */
-function extractEyes(ctx) {
-  const frontFace = PART_REGIONS.head.faces.front; // {x:8, y:8, w:8, h:8}
-  
-  // 눈은 보통 머리 앞면의 y=11~14 (UV 기준 y=11~14) 범위에 위치
-  const eyeRegion = { x: frontFace.x, y: 11, w: frontFace.w, h: 3 };
+function extractEyes(ctx, skinInfo, frontClassification) {
+  const front = PART_REGIONS.head.faces.front;
+  const { grid, pixelColors } = frontClassification;
   
   const eyeCanvas = document.createElement('canvas');
   eyeCanvas.width = 64;
   eyeCanvas.height = 64;
   const eyeCtx = eyeCanvas.getContext('2d');
   
-  const imageData = ctx.getImageData(eyeRegion.x, eyeRegion.y, eyeRegion.w, eyeRegion.h);
-  const faceAnalysis = analyzeRegionColors(ctx, frontFace);
-  const skinColor = faceAnalysis.dominantColor;
-  
-  const newData = eyeCtx.createImageData(eyeRegion.w, eyeRegion.h);
-  const src = imageData.data;
-  const dst = newData.data;
+  const frontData = ctx.getImageData(front.x, front.y, front.w, front.h);
+  const newData = eyeCtx.createImageData(front.w, front.h);
   
   let eyePixelCount = 0;
-  
-  for (let i = 0; i < src.length; i += 4) {
-    const r = src[i], g = src[i + 1], b = src[i + 2], a = src[i + 3];
-    if (a === 0) continue;
-    
-    const pixelHex = rgbToHex(r, g, b);
-    const distToSkin = colorDistance(pixelHex, skinColor);
-    
-    // 피부색과 다른 픽셀 → 눈 영역
-    if (distToSkin > 40) {
-      dst[i] = r; dst[i + 1] = g; dst[i + 2] = b; dst[i + 3] = a;
-      eyePixelCount++;
+  const eyeRowsDetected = [];
+
+  for (let y = 0; y < front.h; y++) {
+    for (let x = 0; x < front.w; x++) {
+      const idx = (y * front.w + x) * 4;
+      
+      if (grid[y][x] === 'eye') {
+        newData.data[idx] = frontData.data[idx];
+        newData.data[idx + 1] = frontData.data[idx + 1];
+        newData.data[idx + 2] = frontData.data[idx + 2];
+        newData.data[idx + 3] = frontData.data[idx + 3];
+        eyePixelCount++;
+        if (!eyeRowsDetected.includes(y)) eyeRowsDetected.push(y);
+      }
     }
   }
   
-  eyeCtx.putImageData(newData, eyeRegion.x, eyeRegion.y);
-  
+  eyeCtx.putImageData(newData, front.x, front.y);
+
+  // 눈 패턴 분석 정보
+  const eyeInfo = {
+    eyePixels: eyePixelCount,
+    detectedRows: eyeRowsDetected.map(y => y + front.y),
+    rowCount: eyeRowsDetected.length,
+  };
+
+  // 대칭성 점수 계산
+  if (eyeRowsDetected.length > 0) {
+    let symScore = 0;
+    eyeRowsDetected.forEach(y => {
+      let matches = 0;
+      for (let x = 0; x < 4; x++) {
+        const mirrorX = 7 - x;
+        if (grid[y][x] === grid[y][mirrorX]) matches++;
+      }
+      symScore += matches / 4;
+    });
+    eyeInfo.symmetryScore = symScore / eyeRowsDetected.length;
+  }
+
   return {
     partId: 'eyes',
     label: SEMANTIC_PARTS.eyes.label,
     canvas: eyeCanvas,
-    confidence: eyePixelCount > 0 ? Math.min(eyePixelCount / (eyeRegion.w * eyeRegion.h), 1.0) : 0,
-    info: {
-      eyePixels: eyePixelCount,
-      region: eyeRegion,
-    },
+    confidence: eyePixelCount > 0 ? Math.min(eyePixelCount / 16, 1.0) : 0, // 16: 눈 최대 예상 크기
+    info: eyeInfo,
   };
 }
 
 /**
  * 상의(Top/Shirt)를 추출합니다.
- * Body UV 영역 전체를 추출합니다.
+ * Body UV 영역 전체를 있는 그대로 추출합니다.
  */
 function extractTop(ctx) {
   const bodyFaces = PART_REGIONS.body.faces;
@@ -507,7 +826,7 @@ function extractTop(ctx) {
   
   let pixelCount = 0;
 
-  // 몸통 메인 레이어
+  // 몸통 메인 레이어 전체 복사
   Object.values(bodyFaces).forEach(face => {
     const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
     topCtx.putImageData(imageData, face.x, face.y);
@@ -541,8 +860,8 @@ function extractTop(ctx) {
 }
 
 /**
- * 소매(Sleeves)를 추출합니다.
- * 양팔의 상반부(상의 소매 부분)를 추출합니다.
+ * 소매(Sleeves/Arms)를 추출합니다.
+ * 양팔 전체 UV 영역을 추출합니다 (상반부만 자르지 않음).
  */
 function extractSleeves(ctx) {
   const sleeveCanvas = document.createElement('canvas');
@@ -552,24 +871,16 @@ function extractSleeves(ctx) {
 
   let pixelCount = 0;
 
-  // 오른팔, 왼팔의 모든 면을 추출
   ['rightArm', 'leftArm'].forEach(armKey => {
     const armFaces = PART_REGIONS[armKey].faces;
     const armOverlay = PART_REGIONS[armKey].overlay;
 
+    // 전체 팔 UV 복사
     Object.values(armFaces).forEach(face => {
-      // 상단 절반만 (소매)
-      const sleeveRegion = { ...face, h: Math.ceil(face.h / 2) };
-      if (face.h <= 4) {
-        // top/bottom 면은 전체 포함
-        const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
-        sleeveCtx.putImageData(imageData, face.x, face.y);
-      } else {
-        const imageData = ctx.getImageData(sleeveRegion.x, sleeveRegion.y, sleeveRegion.w, sleeveRegion.h);
-        sleeveCtx.putImageData(imageData, sleeveRegion.x, sleeveRegion.y);
-      }
+      const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
+      sleeveCtx.putImageData(imageData, face.x, face.y);
 
-      const data = ctx.getImageData(face.x, face.y, face.w, face.h).data;
+      const data = imageData.data;
       for (let i = 3; i < data.length; i += 4) {
         if (data[i] > 0) pixelCount++;
       }
@@ -595,7 +906,7 @@ function extractSleeves(ctx) {
 
 /**
  * 하의(Bottom/Pants)를 추출합니다.
- * 양다리의 상반부(바지 부분)를 추출합니다.
+ * 양다리 전체 UV 영역을 추출합니다.
  */
 function extractBottom(ctx) {
   const bottomCanvas = document.createElement('canvas');
@@ -609,20 +920,12 @@ function extractBottom(ctx) {
     const legFaces = PART_REGIONS[legKey].faces;
     const legOverlay = PART_REGIONS[legKey].overlay;
 
-    Object.entries(legFaces).forEach(([faceName, face]) => {
-      if (faceName === 'top' || faceName === 'bottom') {
-        // top/bottom 면은 전체 포함
-        const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
-        bottomCtx.putImageData(imageData, face.x, face.y);
-      } else {
-        // 측면: 상반부만 (바지 부분)
-        const pantsH = Math.ceil(face.h * 2 / 3); // 상위 2/3 = 바지
-        const pantsRegion = { x: face.x, y: face.y, w: face.w, h: pantsH };
-        const imageData = ctx.getImageData(pantsRegion.x, pantsRegion.y, pantsRegion.w, pantsRegion.h);
-        bottomCtx.putImageData(imageData, pantsRegion.x, pantsRegion.y);
-      }
+    // 전체 다리 UV 복사
+    Object.values(legFaces).forEach(face => {
+      const imageData = ctx.getImageData(face.x, face.y, face.w, face.h);
+      bottomCtx.putImageData(imageData, face.x, face.y);
 
-      const data = ctx.getImageData(face.x, face.y, face.w, face.h).data;
+      const data = imageData.data;
       for (let i = 3; i < data.length; i += 4) {
         if (data[i] > 0) pixelCount++;
       }
@@ -648,7 +951,7 @@ function extractBottom(ctx) {
 
 /**
  * 신발(Shoes)을 추출합니다.
- * 양다리의 하단부(실제 신발 영역)를 추출합니다.
+ * 양다리 하단부만 따로 추출합니다 (다리 측면 하단 4px + 바닥면).
  */
 function extractShoes(ctx) {
   const shoeCanvas = document.createElement('canvas');
@@ -657,7 +960,7 @@ function extractShoes(ctx) {
   const shoeCtx = shoeCanvas.getContext('2d');
 
   let pixelCount = 0;
-  const shoeHeight = 4; // 하단 4픽셀 = 신발
+  const shoeHeight = 4;
 
   ['rightLeg', 'leftLeg'].forEach(legKey => {
     const legFaces = PART_REGIONS[legKey].faces;
@@ -671,9 +974,8 @@ function extractShoes(ctx) {
       } else if (faceName !== 'top' && face.h > 4) {
         // 측면: 하단 4픽셀만
         const shoeY = face.y + face.h - shoeHeight;
-        const shoeRegion = { x: face.x, y: shoeY, w: face.w, h: shoeHeight };
-        const imageData = ctx.getImageData(shoeRegion.x, shoeRegion.y, shoeRegion.w, shoeRegion.h);
-        shoeCtx.putImageData(imageData, shoeRegion.x, shoeRegion.y);
+        const imageData = ctx.getImageData(face.x, shoeY, face.w, shoeHeight);
+        shoeCtx.putImageData(imageData, face.x, shoeY);
         
         const data = imageData.data;
         for (let i = 3; i < data.length; i += 4) {
@@ -746,7 +1048,7 @@ function extractAccessories(ctx) {
  * @returns {Promise<{ parts: Array<ExtractedPart>, skinAnalysis: object }>}
  * 
  * @typedef {Object} ExtractedPart
- * @property {string} partId - 파츠 식별자 (hair, eyes, face, top, sleeves, gloves, bottom, shoes, accessory)
+ * @property {string} partId - 파츠 식별자 (hair, eyes, top, sleeves, bottom, shoes, accessory)
  * @property {string} label - 한국어 레이블
  * @property {HTMLCanvasElement} canvas - 해당 파츠만 그려진 64x64 캔버스
  * @property {number} confidence - 인식 신뢰도 (0~1)
@@ -759,10 +1061,19 @@ export async function extractSkinParts(source) {
   // 2. 전체 스킨 분석
   const fullAnalysis = analyzeRegionColors(ctx, { x: 0, y: 0, w: 64, h: 64 });
 
-  // 3. 각 파츠 추출
+  // 3. 스마트 피부색 감지
+  const skinInfo = detectSkinColor(ctx);
+  
+  // 4. 적응형 임계값 계산
+  skinInfo.threshold = computeAdaptiveThreshold(ctx, skinInfo.skinColor);
+
+  // 5. 머리 앞면 픽셀 분류 (한 번만 계산하여 hair/eyes 공유)
+  const frontClassification = classifyHeadFrontPixels(ctx, skinInfo.skinColor, skinInfo.threshold);
+
+  // 6. 각 파츠 추출
   const parts = [
-    extractHair(ctx),
-    extractEyes(ctx),
+    extractHair(ctx, skinInfo, frontClassification),
+    extractEyes(ctx, skinInfo, frontClassification),
     extractTop(ctx),
     extractSleeves(ctx),
     extractBottom(ctx),
@@ -770,7 +1081,7 @@ export async function extractSkinParts(source) {
     extractAccessories(ctx),
   ];
 
-  // 4. 신뢰도 기준으로 정렬 (높은 순)
+  // 7. 신뢰도 기준으로 정렬 (높은 순)
   parts.sort((a, b) => b.confidence - a.confidence);
 
   return {
@@ -781,9 +1092,13 @@ export async function extractSkinParts(source) {
       dominantColor: fullAnalysis.dominantColor,
       avgBrightness: fullAnalysis.avgBrightness,
       colorCount: fullAnalysis.colors.size,
+      detectedSkinColor: skinInfo.skinColor,
+      skinColorConfidence: skinInfo.confidence,
+      adaptiveThreshold: skinInfo.threshold,
     },
   };
 }
+
 
 /**
  * 추출된 파츠를 PNG Data URL로 변환합니다.
