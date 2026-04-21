@@ -7,7 +7,10 @@ import { Wardrobe } from './components/Wardrobe';
 import { SkinPartExtractorUI } from './components/SkinPartExtractorUI';
 import { PartEditor } from './components/PartEditor';
 import { drawDefaultSkin } from './utils/skinGenerator';
+import { SKIN_UVS } from './utils/skinUVs';
 import './index.css';
+
+// 클리핑 마스크(getClipBoxesForCategory) 로직은 모든 파츠를 64x64 규격으로 통일할 것이므로 제거되었습니다.
 
 function App() {
   const [texture, setTexture] = useState(null);
@@ -59,17 +62,45 @@ function App() {
     drawDefaultSkin(ctx, modelType);
     
     // 등록된 파츠 (public 폴더의 url 이미지 또는 LocalStorage의 base64 커스텀 파츠) 렌더링
+    // 파츠 렌더링 순서 보장을 위해 카테고리 순서대로 그립니다.
     const customPartKeys = Object.keys(selections).filter(k => k.endsWith('_dataUrl'));
     if (customPartKeys.length > 0) {
       let loadedCount = 0;
+      
       customPartKeys.forEach(key => {
         const dataUrl = selections[key];
+        const catId = key.replace('_dataUrl', '');
+        const filterColor = selections[`${catId}_color`];
+
         if (!dataUrl) return;
         const img = new Image();
         img.onload = () => {
-          // 크기를 64x64로 강제 변환하면 64x32(구버전) 스킨 적용 시 위아래로 늘어나버리는 문제 발생
-          // 원래 크기 그대로 (1:1 픽셀 매칭) 덮어씌우도록 수정합니다.
-          ctx.drawImage(img, 0, 0);
+          if (filterColor && filterColor !== '#ffffff') {
+            // 오프스크린 캔버스에 그리기 (투명도 유지 및 Multiply 합성)
+            const scratch = document.createElement('canvas');
+            scratch.width = img.width;
+            scratch.height = img.height;
+            const sCtx = scratch.getContext('2d');
+            
+            // 1. 원본 파츠 그리기
+            sCtx.drawImage(img, 0, 0);
+            
+            // 2. 색상 곱하기 (Multiply)
+            sCtx.globalCompositeOperation = 'multiply';
+            sCtx.fillStyle = filterColor;
+            sCtx.fillRect(0, 0, scratch.width, scratch.height);
+            
+            // 3. 원래 이미지의 불투명한 부분만 남기기 (투명도 복구)
+            sCtx.globalCompositeOperation = 'destination-in';
+            sCtx.drawImage(img, 0, 0);
+            
+            // 4. 메인 캔버스에 컬러 필터가 적용된 파츠 렌더링
+            ctx.drawImage(scratch, 0, 0);
+          } else {
+            // 컬러 필터가 없으면 원본 그대로 렌더링
+            ctx.drawImage(img, 0, 0);
+          }
+          
           loadedCount++;
           if (loadedCount >= customPartKeys.length) {
             editorRef.current?.updateTexture();

@@ -353,10 +353,10 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
                     ✏️ 편집
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDownloadPart(part.croppedDataUrl, part.partId); }}
+                    onClick={(e) => { e.stopPropagation(); handleDownloadPart(part.dataUrl, part.partId); }}
                     className="btn-icon"
                     style={{ padding: '3px', opacity: 0.5 }}
-                    title={`${part.label} 다운로드`}
+                    title={`${part.label} (64x64 원본) 다운로드`}
                   >
                     <Download size={12} />
                   </button>

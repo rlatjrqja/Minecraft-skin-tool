@@ -6,13 +6,48 @@ export const BASE_CATEGORIES = [
   // --- 캐릭터 외형 ---
   // 아래 주석 처리된 예시처럼, public 폴더에 파츠 PNG 파일을 넣고 url 속성을 추가하여 기본 선택지를 추가할 수 있습니다.
   // 예시: { id: 'cool_jacket', name: '멋진 자켓', url: '/parts/top/cool_jacket.png' }
-  { id: 'hair', label: '헤어스타일', icon: '💇', group: 'appearance', options: [{ id: 'base', name: '기본 헤어' }] },
-  { id: 'eyes', label: '눈 모양', icon: '👁', group: 'appearance', options: [{ id: 'base', name: '기본 눈' }] },
-  { id: 'mouth', label: '입모양', icon: '👄', group: 'appearance', options: [{ id: 'base', name: '기본 입' }] },
-  { id: 'top', label: '상의', icon: '👕', group: 'appearance', options: [{ id: 'base', name: '기본 상의' }] },
-  { id: 'sleeves', label: '소매', icon: '💪', group: 'appearance', options: [{ id: 'base', name: '기본 소매' }] },
-  { id: 'bottom', label: '하의', icon: '👖', group: 'appearance', options: [{ id: 'base', name: '기본 하의' }] },
-  { id: 'shoes', label: '신발', icon: '👟', group: 'appearance', options: [{ id: 'base', name: '기본 신발' }] },
+  {
+    id: 'hair', label: '헤어스타일', icon: '💇', group: 'appearance', options: [
+      { id: 'base', name: '기본 헤어' },
+      { id: 'hair1', name: '헤어1', url: '/assets/parts/hair/Hair1.png' }
+    ]
+  },
+  {
+    id: 'eyes', label: '눈 모양', icon: '👁', group: 'appearance', options: [
+      { id: 'base', name: '기본 눈' },
+      { id: 'eyes1', name: '눈1', url: '/assets/parts/eyes/eyes1.png' }
+    ]
+  },
+  {
+    id: 'mouth', label: '입모양', icon: '👄', group: 'appearance', options: [
+      { id: 'base', name: '기본 입' }
+    ]
+  },
+  {
+    id: 'top', label: '상의', icon: '👕', group: 'appearance', options: [
+      { id: 'base', name: '기본 상의' },
+      { id: 'White_shirts', name: '흰 셔츠', url: '/assets/parts/shirts/WhiteShirts.png' }
+      //{ id: 'top1', name: '상의1', url: '/assets/parts/top/Top1.png' }
+    ]
+  },
+  {
+    id: 'sleeves', label: '소매', icon: '💪', group: 'appearance', options: [
+      { id: 'base', name: '기본 소매' }
+    ]
+  },
+  {
+    id: 'bottom', label: '하의', icon: '👖', group: 'appearance', options: [
+      { id: 'base', name: '기본 하의' },
+      { id: 'black_pants', name: '검은 바지', url: '/assets/parts/pants/BlackPants.png' }
+      //{ id: 'bottom1', name: '하의1', url: '/assets/parts/bottom/Bottom1.png' }
+    ]
+  },
+  {
+    id: 'shoes', label: '신발', icon: '👟', group: 'appearance', options: [
+      { id: 'base', name: '기본 신발' },
+      //{ id: 'shoes1', name: '신발1', url: '/assets/parts/shoes/Shoes1.png' }
+    ]
+  },
   // --- 장신구 ---
   {
     id: 'hat', label: '모자', icon: '🎩', group: 'accessory', options: [
@@ -52,6 +87,7 @@ export function getDefaultSelections() {
 export function Wardrobe({ onChange, refreshKey = 0 }) {
   const categories = useMergedCategories(refreshKey);
   const [selections, setSelections] = useState(getDefaultSelections);
+  const [colors, setColors] = useState({});
 
   useEffect(() => {
     setSelections(prev => {
@@ -77,9 +113,13 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
       if (opt?.url || opt?.dataUrl) {
         selectedIds[`${cat.id}_dataUrl`] = opt.url || opt.dataUrl;
       }
+      // 컬러 필터가 설정되어 있으면 같이 전달
+      if (colors[cat.id]) {
+        selectedIds[`${cat.id}_color`] = colors[cat.id];
+      }
     });
     onChange(selectedIds);
-  }, [selections, categories, onChange]);
+  }, [selections, colors, categories, onChange]);
 
   const handlePrev = (catId) => {
     setSelections(prev => {
@@ -109,12 +149,45 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
 
     return (
       <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span>{cat.icon}</span> {cat.label}
-          <span style={{ marginLeft: 'auto', fontSize: '0.7rem', opacity: 0.5 }}>
-            {cat.options.length}종
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span>{cat.icon}</span> {cat.label}
+            <span style={{ marginLeft: '4px', fontSize: '0.7rem', opacity: 0.5 }}>
+              {cat.options.length}종
+            </span>
           </span>
-        </span>
+          {/* Color Picker & Reset */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {colors[cat.id] && (
+              <button
+                className="btn-icon"
+                onClick={() => setColors(prev => { const n = { ...prev }; delete n[cat.id]; return n; })}
+                style={{ fontSize: '0.65rem', padding: '2px 6px', opacity: 0.8 }}
+                title="색상 초기화"
+              >
+                초기화
+              </button>
+            )}
+            <div
+              style={{
+                width: '18px', height: '18px', borderRadius: '50%', overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.3)', position: 'relative', cursor: 'pointer'
+              }}
+              title="컬러 필터 적용"
+            >
+              <input
+                type="color"
+                value={colors[cat.id] || '#ffffff'}
+                onChange={(e) => setColors(prev => ({ ...prev, [cat.id]: e.target.value }))}
+                style={{
+                  position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%',
+                  cursor: 'pointer', padding: 0, margin: 0, border: 'none'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           backgroundColor: hasMultipleOptions ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)',
@@ -210,6 +283,7 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
                   deleteCustomSkin(name);
                   // 삭제 후 선택 초기화
                   setSelections(getDefaultSelections());
+                  setColors({});
                   // force re-render via parent
                   onChange({ _deleted: name });
                 }}
