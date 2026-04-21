@@ -1,0 +1,136 @@
+// ─── UV 영역 정의 (64x64 스킨 기준) ───
+
+export const PART_REGIONS = {
+  head: {
+    label: '머리',
+    faces: {
+      top:    { x: 8,  y: 0,  w: 8, h: 8 },
+      bottom: { x: 16, y: 0,  w: 8, h: 8 },
+      front:  { x: 8,  y: 8,  w: 8, h: 8 },
+      back:   { x: 24, y: 8,  w: 8, h: 8 },
+      right:  { x: 0,  y: 8,  w: 8, h: 8 },
+      left:   { x: 16, y: 8,  w: 8, h: 8 },
+    },
+    overlay: {
+      top:    { x: 40, y: 0,  w: 8, h: 8 },
+      bottom: { x: 48, y: 0,  w: 8, h: 8 },
+      front:  { x: 40, y: 8,  w: 8, h: 8 },
+      back:   { x: 56, y: 8,  w: 8, h: 8 },
+      right:  { x: 32, y: 8,  w: 8, h: 8 },
+      left:   { x: 48, y: 8,  w: 8, h: 8 },
+    },
+  },
+  body: {
+    label: '상의',
+    faces: {
+      top:    { x: 20, y: 16, w: 8, h: 4 },
+      bottom: { x: 28, y: 16, w: 8, h: 4 },
+      front:  { x: 20, y: 20, w: 8, h: 12 },
+      back:   { x: 32, y: 20, w: 8, h: 12 },
+      right:  { x: 16, y: 20, w: 4, h: 12 },
+      left:   { x: 28, y: 20, w: 4, h: 12 },
+    },
+    overlay: {
+      top:    { x: 20, y: 32, w: 8, h: 4 },
+      bottom: { x: 28, y: 32, w: 8, h: 4 },
+      front:  { x: 20, y: 36, w: 8, h: 12 },
+      back:   { x: 32, y: 36, w: 8, h: 12 },
+      right:  { x: 16, y: 36, w: 4, h: 12 },
+      left:   { x: 28, y: 36, w: 4, h: 12 },
+    },
+  },
+  rightArm: {
+    label: '오른팔',
+    faces: {
+      top:    { x: 44, y: 16, w: 4, h: 4 },
+      bottom: { x: 48, y: 16, w: 4, h: 4 },
+      front:  { x: 44, y: 20, w: 4, h: 12 },
+      back:   { x: 52, y: 20, w: 4, h: 12 },
+      right:  { x: 40, y: 20, w: 4, h: 12 },
+      left:   { x: 48, y: 20, w: 4, h: 12 },
+    },
+    overlay: {
+      top:    { x: 44, y: 32, w: 4, h: 4 },
+      bottom: { x: 48, y: 32, w: 4, h: 4 },
+      front:  { x: 44, y: 36, w: 4, h: 12 },
+      back:   { x: 52, y: 36, w: 4, h: 12 },
+      right:  { x: 40, y: 36, w: 4, h: 12 },
+      left:   { x: 48, y: 36, w: 4, h: 12 },
+    },
+  },
+  leftArm: {
+    label: '왼팔',
+    faces: {
+      top:    { x: 36, y: 48, w: 4, h: 4 },
+      bottom: { x: 40, y: 48, w: 4, h: 4 },
+      front:  { x: 36, y: 52, w: 4, h: 12 },
+      back:   { x: 44, y: 52, w: 4, h: 12 },
+      right:  { x: 32, y: 52, w: 4, h: 12 },
+      left:   { x: 40, y: 52, w: 4, h: 12 },
+    },
+    overlay: {
+      top:    { x: 52, y: 48, w: 4, h: 4 },
+      bottom: { x: 56, y: 48, w: 4, h: 4 },
+      front:  { x: 52, y: 52, w: 4, h: 12 },
+      back:   { x: 60, y: 52, w: 4, h: 12 },
+      right:  { x: 48, y: 52, w: 4, h: 12 },
+      left:   { x: 56, y: 52, w: 4, h: 12 },
+    },
+  },
+  rightLeg: {
+    label: '오른다리',
+    faces: {
+      top:    { x: 4,  y: 16, w: 4, h: 4 },
+      bottom: { x: 8,  y: 16, w: 4, h: 4 },
+      front:  { x: 4,  y: 20, w: 4, h: 12 },
+      back:   { x: 12, y: 20, w: 4, h: 12 },
+      right:  { x: 0,  y: 20, w: 4, h: 12 },
+      left:   { x: 8,  y: 20, w: 4, h: 12 },
+    },
+    overlay: {
+      top:    { x: 4,  y: 32, w: 4, h: 4 },
+      bottom: { x: 8,  y: 32, w: 4, h: 4 },
+      front:  { x: 4,  y: 36, w: 4, h: 12 },
+      back:   { x: 12, y: 36, w: 4, h: 12 },
+      right:  { x: 0,  y: 36, w: 4, h: 12 },
+      left:   { x: 8,  y: 36, w: 4, h: 12 },
+    },
+  },
+  leftLeg: {
+    label: '왼다리',
+    faces: {
+      top:    { x: 20, y: 48, w: 4, h: 4 },
+      bottom: { x: 24, y: 48, w: 4, h: 4 },
+      front:  { x: 20, y: 52, w: 4, h: 12 },
+      back:   { x: 28, y: 52, w: 4, h: 12 },
+      right:  { x: 16, y: 52, w: 4, h: 12 },
+      left:   { x: 24, y: 52, w: 4, h: 12 },
+    },
+    overlay: {
+      top:    { x: 4,  y: 48, w: 4, h: 4 },
+      bottom: { x: 8,  y: 48, w: 4, h: 4 },
+      front:  { x: 4,  y: 52, w: 4, h: 12 },
+      back:   { x: 12, y: 52, w: 4, h: 12 },
+      right:  { x: 0,  y: 52, w: 4, h: 12 },
+      left:   { x: 8,  y: 52, w: 4, h: 12 },
+    },
+  },
+};
+
+export const SEMANTIC_PARTS = {
+  hair: { label: '헤어스타일', description: '머리카락 영역 (머리 상단 + 측면 상단부)', category: 'appearance' },
+  eyes: { label: '눈 모양', description: '눈 영역 (머리 앞면)', category: 'appearance' },
+  mouth: { label: '입모양', description: '입 영역 (머리 앞면 하단 중앙)', category: 'appearance' },
+  top: { label: '상의', description: '상체 의상 영역', category: 'appearance' },
+  sleeves: { label: '소매', description: '팔 의상 영역', category: 'appearance' },
+  bottom: { label: '하의', description: '다리 상단부 의상 영역', category: 'appearance' },
+  shoes: { label: '신발', description: '다리 하단부 의상 영역', category: 'appearance' },
+  
+  hat: { label: '모자', description: '머리 장식 (Head Overlay 레이어 상단/전체)', category: 'accessory' },
+  eye_accessory: { label: '눈장식', description: '안경 등 눈 부근 장식 (Head Overlay 레이어 앞면)', category: 'accessory' },
+  ear_accessory: { label: '귀장식', description: '귀걸이 등 귀 부근 장식 (Head Overlay 측면)', category: 'accessory' },
+  shoulder_accessory: { label: '어깨장식', description: '어깨 장식 (Body Overlay/Arm Overlay 상단)', category: 'accessory' },
+  necklace: { label: '목걸이', description: '목걸이/스카프 (Body Overlay 가슴 영역)', category: 'accessory' },
+  arm_accessory: { label: '팔 장식', description: '팔/손목 장식 (Arm Overlay 레이어 전체)', category: 'accessory' },
+  leg_accessory: { label: '다리장식', description: '다리 장식 (Leg Overlay 레이어 전체)', category: 'accessory' },
+};
