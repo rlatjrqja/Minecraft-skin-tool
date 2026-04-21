@@ -3,65 +3,67 @@ import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { getCustomOptionsForPart, deleteCustomSkin, getSavedSkinNames } from '../utils/partsStorage';
 
 export const BASE_CATEGORIES = [
-  // --- 캐릭터 외형 ---
-  // 아래 주석 처리된 예시처럼, public 폴더에 파츠 PNG 파일을 넣고 url 속성을 추가하여 기본 선택지를 추가할 수 있습니다.
-  // 예시: { id: 'cool_jacket', name: '멋진 자켓', url: '/parts/top/cool_jacket.png' }
-  {
-    id: 'hair', label: '헤어스타일', icon: '💇', group: 'appearance', options: [
-      { id: 'base', name: '기본 헤어' },
-      { id: 'hair1', name: '헤어1', url: '/assets/parts/hair/Hair1.png' }
-    ]
-  },
-  {
-    id: 'eyes', label: '눈 모양', icon: '👁', group: 'appearance', options: [
-      { id: 'base', name: '기본 눈' },
-      { id: 'eyes1', name: '눈1', url: '/assets/parts/eyes/eyes1.png' }
-    ]
-  },
-  {
-    id: 'mouth', label: '입모양', icon: '👄', group: 'appearance', options: [
-      { id: 'base', name: '기본 입' }
-    ]
-  },
-  {
-    id: 'top', label: '상의', icon: '👕', group: 'appearance', options: [
-      { id: 'base', name: '기본 상의' },
-      { id: 'White_shirts', name: '흰 셔츠', url: '/assets/parts/shirts/WhiteShirts.png' }
-      //{ id: 'top1', name: '상의1', url: '/assets/parts/top/Top1.png' }
-    ]
-  },
-  {
-    id: 'sleeves', label: '소매', icon: '💪', group: 'appearance', options: [
-      { id: 'base', name: '기본 소매' }
-    ]
-  },
-  {
-    id: 'bottom', label: '하의', icon: '👖', group: 'appearance', options: [
-      { id: 'base', name: '기본 하의' },
-      { id: 'black_pants', name: '검은 바지', url: '/assets/parts/pants/BlackPants.png' }
-      //{ id: 'bottom1', name: '하의1', url: '/assets/parts/bottom/Bottom1.png' }
-    ]
-  },
-  {
-    id: 'shoes', label: '신발', icon: '👟', group: 'appearance', options: [
-      { id: 'base', name: '기본 신발' },
-      //{ id: 'shoes1', name: '신발1', url: '/assets/parts/shoes/Shoes1.png' }
-    ]
-  },
+  { id: 'hair', label: '헤어스타일', icon: '💇', group: 'appearance', options: [{ id: 'base', name: '기본 헤어' }] },
+  { id: 'eyes', label: '눈 모양', icon: '👁', group: 'appearance', options: [{ id: 'base', name: '기본 눈' }] },
+  { id: 'mouth', label: '입모양', icon: '👄', group: 'appearance', options: [{ id: 'base', name: '기본 입' }] },
+  { id: 'shirts', label: '상의', icon: '👕', group: 'appearance', options: [{ id: 'base', name: '기본 상의' }] },
+  { id: 'sleeves', label: '소매', icon: '💪', group: 'appearance', options: [{ id: 'base', name: '기본 소매' }] },
+  { id: 'pants', label: '하의', icon: '👖', group: 'appearance', options: [{ id: 'base', name: '기본 하의' }] },
+  { id: 'shoes', label: '신발', icon: '👟', group: 'appearance', options: [{ id: 'base', name: '기본 신발' }] },
   // --- 장신구 ---
-  {
-    id: 'hat', label: '모자', icon: '🎩', group: 'accessory', options: [
-      { id: 'base', name: '없음' },
-      { id: 'roasted_chestnut_hat', name: '군밤모자', url: '/assets/parts/hat/Roasted chestnut hat.png' }
-    ]
-  },
-  { id: 'eye_accessory', label: '눈장식', icon: '🕶', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
-  { id: 'ear_accessory', label: '귀장식', icon: '👂', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
-  { id: 'shoulder_accessory', label: '어깨장식', icon: '🎗', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'hat', label: '모자', icon: '🎩', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'accessory_eye', label: '눈장식', icon: '🕶', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'accessory_ear', label: '귀장식', icon: '👂', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'accessory_shoulder', label: '어깨장식', icon: '🎗', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
   { id: 'necklace', label: '목걸이', icon: '📿', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
-  { id: 'arm_accessory', label: '팔 장식', icon: '⌚', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
-  { id: 'leg_accessory', label: '다리장식', icon: '🐾', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'accessory_arm', label: '팔 장식', icon: '⌚', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
+  { id: 'accessory_leg', label: '다리장식', icon: '🐾', group: 'accessory', options: [{ id: 'base', name: '없음' }] },
 ];
+
+/**
+ * 1. 동적 파츠 옵션 스캔: src/assets/parts 하위의 모든 png 파일을 로드합니다.
+ */
+const staticParts = import.meta.glob('../assets/parts/**/*.png', { eager: true, query: '?url', import: 'default' });
+
+// 이제 폴더명(shirts, pants) 자체가 id와 동일하므로, 특별한 디렉토리 치환을 제거하거나 최소화합니다.
+const dirToCategoryId = {
+  // 이전 호환성(top/bottom 이름으로 남아있는 폴더가 있다면 shirts/pants로 매핑)
+  top: 'shirts',
+  bottom: 'pants',
+};
+
+const dynamicOptionsMap = {};
+
+Object.entries(staticParts).forEach(([filepath, url]) => {
+  const match = filepath.match(/\.\.\/assets\/parts\/([^\/]+)\/([^\/]+)\.png$/);
+  if (match) {
+    let dirName = match[1];
+    const fileName = match[2];
+
+    const catId = dirToCategoryId[dirName] || dirName;
+
+    if (!dynamicOptionsMap[catId]) {
+      dynamicOptionsMap[catId] = [];
+    }
+
+    // 파일명에 있는 _,- 등을 공백으로 치환하여 표시할 이름으로 사용
+    const readableName = fileName.replace(/[_-]/g, ' ');
+
+    dynamicOptionsMap[catId].push({
+      id: fileName,
+      name: readableName,
+      url: url
+    });
+  }
+});
+
+// 자동 로드된 옵션을 BASE_CATEGORIES에 반영
+BASE_CATEGORIES.forEach(cat => {
+  if (dynamicOptionsMap[cat.id]) {
+    cat.options.push(...dynamicOptionsMap[cat.id]);
+  }
+});
+
 
 /**
  * 기본 카테고리 + localStorage의 커스텀 파츠를 병합한 카테고리 목록을 반환합니다.
@@ -88,6 +90,7 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
   const categories = useMergedCategories(refreshKey);
   const [selections, setSelections] = useState(getDefaultSelections);
   const [colors, setColors] = useState({});
+  const [skinTone, setSkinTone] = useState('');
 
   useEffect(() => {
     setSelections(prev => {
@@ -105,6 +108,9 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
 
   useEffect(() => {
     const selectedIds = {};
+    if (skinTone) {
+      selectedIds.skinTone = skinTone;
+    }
     categories.forEach(cat => {
       const idx = selections[cat.id] ?? 0;
       const opt = cat.options[idx];
@@ -119,7 +125,7 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
       }
     });
     onChange(selectedIds);
-  }, [selections, colors, categories, onChange]);
+  }, [selections, colors, skinTone, categories, onChange]);
 
   const handlePrev = (catId) => {
     setSelections(prev => {
@@ -230,6 +236,47 @@ export function Wardrobe({ onChange, refreshKey = 0 }) {
 
   return (
     <div className="wardrobe-container" style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
+
+      {/* 피부색 섹션 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px'
+        }}>
+          <h3 style={{ margin: 0, color: 'var(--primary)', fontSize: '1rem' }}>피부색 (Skin Tone)</h3>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '24px', height: '24px', borderRadius: '50%', overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.3)', position: 'relative', cursor: 'pointer'
+            }}>
+              <input
+                type="color"
+                value={skinTone || '#b9856f'}
+                onChange={(e) => setSkinTone(e.target.value)}
+                style={{
+                  position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%',
+                  cursor: 'pointer', padding: 0, margin: 0, border: 'none'
+                }}
+              />
+            </div>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              {skinTone ? '사용자 지정 피부색' : '기본 피부색'}
+            </span>
+          </div>
+          {skinTone && (
+            <button
+              className="btn-icon"
+              onClick={() => setSkinTone('')}
+              style={{ fontSize: '0.65rem', padding: '2px 6px', opacity: 0.8 }}
+              title="피부색 초기화"
+            >
+              초기화
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* 캐릭터 외형 섹션 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

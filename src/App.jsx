@@ -6,7 +6,7 @@ import { CanvasEditor } from './components/CanvasEditor';
 import { Wardrobe } from './components/Wardrobe';
 import { SkinPartExtractorUI } from './components/SkinPartExtractorUI';
 import { PartEditor } from './components/PartEditor';
-import { drawDefaultSkin } from './utils/skinGenerator';
+import { drawBaseNakedSkin, drawDefaultPart } from './utils/skinGenerator';
 import { SKIN_UVS } from './utils/skinUVs';
 import './index.css';
 
@@ -16,11 +16,11 @@ function App() {
   const [texture, setTexture] = useState(null);
   const [activeTool, setActiveTool] = useState('brush'); // brush | eraser
   const [currentColor, setCurrentColor] = useState('#66fcf1');
-  const [activeTab, setActiveTab] = useState('3d'); // 3d | editor | wardrobe
-  const [rightPanelTab, setRightPanelTab] = useState('wardrobe'); // wardrobe | extractor
+  const [activeTab, setActiveTab] = useState('3d'); // 3d | editor | extractor | part-editor
   const [modelType, setModelType] = useState('classic'); // classic (Steve) | slim (Alex)
   const [wardrobeRefreshKey, setWardrobeRefreshKey] = useState(0); // 워드로브 강제 갱신용
   const [partEditorProps, setPartEditorProps] = useState(null);
+  const [extractorPortalTarget, setExtractorPortalTarget] = useState(null);
   
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [rotateSpeed, setRotateSpeed] = useState(1);
@@ -43,7 +43,7 @@ function App() {
   };
 
   const [wardrobeSelections, setWardrobeSelections] = useState({
-    hair: 'base', eyes: 'base', head: 'base', top: 'base', sleeves: 'base', bottom: 'base', shoes: 'base', accessory: 'base'
+    hair: 'base', eyes: 'base', head: 'base', shirts: 'base', sleeves: 'base', pants: 'base', shoes: 'base', accessory: 'base'
   });
 
   const handleWardrobeChange = useCallback((selections) => {
@@ -58,12 +58,20 @@ function App() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     
-    // 의상 덧씌우기 전, 현재 체형의 기본 스킨으로 초기화
-    drawDefaultSkin(ctx, modelType);
-    
-    // 등록된 파츠 (public 폴더의 url 이미지 또는 LocalStorage의 base64 커스텀 파츠) 렌더링
-    // 파츠 렌더링 순서 보장을 위해 카테고리 순서대로 그립니다.
-    const customPartKeys = Object.keys(selections).filter(k => k.endsWith('_dataUrl'));
+    // 1. 선택된 피부색이 있을 경우 해당 색상으로 맨몸(Base Naked Skin) 렌더링
+    const { skinTone, ...partSelections } = selections;
+    drawBaseNakedSkin(ctx, modelType, skinTone);
+
+    // 2. 각 파츠 카테고리별로 '기본(Base)' 상태인 경우에만 스티브/알렉스 기본 의상이나 얼굴 요소 렌더링
+    // _dataUrl 이나 _color 같은 파생 키를 제외한 순수 카테고리만 대상입니다 (ex: 'hair', 'top')
+    Object.keys(partSelections).forEach(catId => {
+      if (!catId.includes('_') && partSelections[catId] === 'base') {
+        drawDefaultPart(ctx, modelType, catId);
+      }
+    });
+
+    // 3. 등록된 커스텀 파츠 (비-Base) 렌더링
+    const customPartKeys = Object.keys(partSelections).filter(k => k.endsWith('_dataUrl'));
     if (customPartKeys.length > 0) {
       let loadedCount = 0;
       
@@ -235,6 +243,12 @@ function App() {
               >
                 2D 에디터
               </button>
+              <button 
+                className={`tab ${activeTab === 'extractor' ? 'active' : ''}`}
+                onClick={() => setActiveTab('extractor')}
+              >
+                🧩 파츠 분해
+              </button>
               {partEditorProps && (
                 <button 
                   className={`tab ${activeTab === 'part-editor' ? 'active' : ''}`}
@@ -273,6 +287,28 @@ function App() {
                  </div>
               </div>
 
+              {/* 파츠 분해 UI */}
+              <div style={{ display: activeTab === 'extractor' ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, flexDirection: 'column', backgroundColor: 'rgba(0,0,0,0.2)', overflowY: 'auto', borderRadius: '8px' }}>
+                <SkinPartExtractorUI
+                  portalTarget={extractorPortalTarget}
+                  onPartsExtracted={(result, skinName) => {
+                    // 워드로브 갱신 트리거
+                    setWardrobeRefreshKey(k => k + 1);
+                  }}
+                  onSwitchToWardrobe={() => {
+                     setActiveTab('3d');
+                  }}
+                  openPartEditor={(props) => {
+                    setPartEditorProps(props);
+                    setActiveTab('part-editor');
+                  }}
+                  closePartEditor={() => {
+                    setPartEditorProps(null);
+                    setActiveTab('extractor');
+                  }}
+                />
+              </div>
+
               {/* 파츠 수정 에디터 */}
               {partEditorProps && (
                 <div style={{ display: activeTab === 'part-editor' ? 'flex' : 'none', width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, flexDirection: 'column', backgroundColor: 'rgba(0,0,0,0.2)' }}>
@@ -304,43 +340,20 @@ function App() {
 
         <aside className="right-panel glass-panel">
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-            {/* 오른쪽 패널 탭 전환 */}
-            <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-              <button
-                className={`tab ${rightPanelTab === 'wardrobe' ? 'active' : ''}`}
-                onClick={() => setRightPanelTab('wardrobe')}
-                style={{ flex: 1, fontSize: '0.8rem' }}
-              >
-                🎨 커스텀
-              </button>
-              <button
-                className={`tab ${rightPanelTab === 'extractor' ? 'active' : ''}`}
-                onClick={() => setRightPanelTab('extractor')}
-                style={{ flex: 1, fontSize: '0.8rem' }}
-              >
-                🧩 파츠 분해
-              </button>
-            </div>
-
-            {rightPanelTab === 'wardrobe' && (
-              <Wardrobe onChange={handleWardrobeChange} refreshKey={wardrobeRefreshKey} />
-            )}
-            {rightPanelTab === 'extractor' && (
-              <SkinPartExtractorUI
-                onPartsExtracted={(result, skinName) => {
-                  // 워드로브 갱신 트리거
-                  setWardrobeRefreshKey(k => k + 1);
-                }}
-                onSwitchToWardrobe={() => setRightPanelTab('wardrobe')}
-                openPartEditor={(props) => {
-                  setPartEditorProps(props);
-                  setActiveTab('part-editor');
-                }}
-                closePartEditor={() => {
-                  setPartEditorProps(null);
-                  setActiveTab('3d');
-                }}
-              />
+            {(activeTab === '3d' || activeTab === 'editor') ? (
+              <>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, fontWeight: 'bold', color: '#66fcf1', textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                   🎨 커스텀
+                </div>
+                <Wardrobe onChange={handleWardrobeChange} refreshKey={wardrobeRefreshKey} />
+              </>
+            ) : (
+              <>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0, fontWeight: 'bold', color: '#66fcf1', textAlign: 'center', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                   🧩 추출된 파츠
+                </div>
+                <div ref={setExtractorPortalTarget} style={{ flex: 1, padding: '12px' }}></div>
+              </>
             )}
           </div>
         </aside>

@@ -6,6 +6,10 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
   const [zoom, setZoom] = useState(1.8);
   const [updateCounter, setUpdateCounter] = useState(0); // 강제 렌더링 트리거
   
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const lastPanPos = useRef({ x: 0, y: 0 });
+
   const displayCanvasRef = useRef(null);
   const isDrawing = useRef(false);
   const lassoStartRef = useRef(null);
@@ -80,6 +84,14 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
   };
 
   const handlePointerDown = (e) => {
+    if (e.button === 2 || e.button === 1) { // 우클릭 또는 휠클릭
+      isPanning.current = true;
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      e.target.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button !== 0) return; // 좌클릭 외 무시
+    
     isDrawing.current = true;
     e.target.setPointerCapture(e.pointerId);
 
@@ -97,6 +109,14 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
   };
 
   const handlePointerMove = (e) => {
+    if (isPanning.current) {
+      const dx = e.clientX - lastPanPos.current.x;
+      const dy = e.clientY - lastPanPos.current.y;
+      setPan(p => ({ x: p.x + dx, y: p.y + dy }));
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
     if (!isDrawing.current) return;
     const pos = getPixelCoords(e);
     if (!pos) return;
@@ -110,6 +130,12 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
   };
 
   const handlePointerUp = (e) => {
+    if (isPanning.current) {
+      isPanning.current = false;
+      e.target.releasePointerCapture(e.pointerId);
+      return;
+    }
+
     if (!isDrawing.current) return;
     isDrawing.current = false;
     e.target.releasePointerCapture(e.pointerId);
@@ -191,7 +217,8 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
         </button>
       </div>
 
-      {/* 사용 방법 안내 (상단 이동) */}
+      {/* 사용 방법 안내 (임시 비활성화) */}
+      {/* 
       <div style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '12px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
         <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.85rem', color: '#ccc', lineHeight: '1.6' }}>
           <li><strong style={{color: '#66fcf1'}}>추가(Paint):</strong> 어두운 곳을 칠해서 파츠 범위에 포함합니다.</li>
@@ -199,82 +226,92 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
           <li><strong style={{color: '#fff'}}>올가미(Lasso):</strong> 드래그하여 일정 범위를 일괄 포함합니다. <strong style={{color: '#ff6060'}}>(Shift+드래그 시 일괄 제외)</strong></li>
         </ul>
       </div>
+      */}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         
-        {/* 툴바 */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '8px', borderRadius: '8px' }}>
+        {/* 우측 상단 플로팅 툴바 (아이콘만) */}
+        <div style={{ 
+          position: 'absolute', top: '16px', right: '16px', zIndex: 10,
+          display: 'flex', flexDirection: 'column', gap: '8px', 
+          backgroundColor: 'rgba(0,0,0,0.6)', padding: '8px', borderRadius: '8px',
+          border: '1px solid rgba(255,255,255,0.1)' 
+        }}>
           <button
             onClick={() => setToolMode('paint')}
             style={{
-              display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px',
+              padding: '10px', borderRadius: '6px',
               backgroundColor: toolMode === 'paint' ? 'rgba(102, 252, 241, 0.2)' : 'transparent',
               color: toolMode === 'paint' ? '#66fcf1' : '#ccc', border: '1px solid',
               borderColor: toolMode === 'paint' ? 'rgba(102, 252, 241, 0.5)' : 'transparent',
-              cursor: 'pointer', transition: 'all 0.2s'
+              cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}
+            title="추가 (Paint)"
           >
-            <Pencil size={18} /> 추가 (Paint)
+            <Pencil size={20} />
           </button>
           <button
             onClick={() => setToolMode('erase')}
             style={{
-              display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px',
+              padding: '10px', borderRadius: '6px',
               backgroundColor: toolMode === 'erase' ? 'rgba(255, 100, 100, 0.2)' : 'transparent',
               color: toolMode === 'erase' ? '#ff6060' : '#ccc', border: '1px solid',
               borderColor: toolMode === 'erase' ? 'rgba(255, 100, 100, 0.5)' : 'transparent',
-              cursor: 'pointer', transition: 'all 0.2s'
+              cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}
+            title="제외 (Erase)"
           >
-            <Eraser size={18} /> 제외 (Erase)
+            <Eraser size={20} />
           </button>
-          
-          {/* 올가미 툴 추가 */}
           <button
             onClick={() => setToolMode('lasso')}
             style={{
-              display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px',
+              padding: '10px', borderRadius: '6px',
               backgroundColor: toolMode === 'lasso' ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
               color: toolMode === 'lasso' ? '#fff' : '#ccc', border: '1px solid',
               borderColor: toolMode === 'lasso' ? 'rgba(255, 255, 255, 0.5)' : 'transparent',
-              cursor: 'pointer', transition: 'all 0.2s'
+              cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}
-            title="드래그: 추가 / Shift+드래그: 제외"
+            title="올가미 (Lasso) - 드래그: 추가 / Shift+드래그: 제외"
           >
-            <SquareDashed size={18} /> 올가미 (Lasso)
+            <SquareDashed size={20} />
           </button>
 
-          <div style={{ width: '1px', backgroundColor: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+          <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.2)', margin: '4px 0' }} />
           
           <button
             onClick={() => setZoom(z => Math.min(z + 0.5, 5))}
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '6px', color: '#ccc', cursor: 'pointer', border: '1px solid transparent', backgroundColor: 'transparent' }}
+            style={{ padding: '8px', borderRadius: '6px', color: '#ccc', cursor: 'pointer', border: '1px solid transparent', backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="확대"
           >
-            <ZoomIn size={18} /> 확대
+            <ZoomIn size={20} />
           </button>
           <button
             onClick={() => setZoom(z => Math.max(z - 0.5, 0.5))}
-            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '6px', color: '#ccc', cursor: 'pointer', border: '1px solid transparent', backgroundColor: 'transparent' }}
+            style={{ padding: '8px', borderRadius: '6px', color: '#ccc', cursor: 'pointer', border: '1px solid transparent', backgroundColor: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             title="축소"
           >
-            <ZoomOut size={18} /> 축소
+            <ZoomOut size={20} />
           </button>
         </div>
 
+        {/* 줌 및 팬 캔버스 영역 */}
         <div 
-          style={{ width: '100%', flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+          style={{ width: '100%', height: '100%', cursor: isPanning.current ? 'grabbing' : 'auto' }}
+          onContextMenu={(e) => e.preventDefault()}
           onWheel={(e) => {
             if (e.ctrlKey || e.metaKey) {
-              e.preventDefault(); // 브라우저 기본 줌 방지
+              e.preventDefault(); 
             }
             const newZoom = zoom - e.deltaY * 0.005;
             setZoom(Math.max(0.5, Math.min(newZoom, 5)));
           }}
         >
-          {/* 캔버스 영역 */}
+          {/* 캔버스 영역 박스 (Transform: Translate + Center) */}
           <div style={{
-            position: 'relative',
+            position: 'absolute',
+            top: '50%', left: '50%',
+            transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px))`,
             width: `${400 * zoom}px`,
             height: `${400 * zoom}px`,
             minWidth: `${400 * zoom}px`,
@@ -282,7 +319,7 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
             borderRadius: '8px',
             boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
             backgroundColor: '#111',
-            cursor: toolMode === 'paint' ? 'crosshair' : toolMode === 'lasso' ? 'crosshair' : 'cell',
+            cursor: isPanning.current ? 'grabbing' : (toolMode === 'paint' ? 'crosshair' : toolMode === 'lasso' ? 'crosshair' : 'cell'),
             border: '1px solid rgba(255,255,255,0.15)'
           }}>
             {/* 바탕 체크무늬 패턴 (투명 확인용) */}
@@ -311,6 +348,7 @@ export function PartEditor({ part, skinCanvas, onComplete }) {
               onPointerUp={handlePointerUp}
               onPointerCancel={(e) => {
                  isDrawing.current = false;
+                 isPanning.current = false;
                  lassoStartRef.current = null;
                  lassoCurrentRef.current = null;
                  renderDisplay();
