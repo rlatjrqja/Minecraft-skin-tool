@@ -1,13 +1,10 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { Upload, Loader2, CheckCircle, AlertCircle, Download, Plus, ArrowRight } from 'lucide-react';
+import { CheckCircle, ArrowRight } from 'lucide-react';
 import { extractSkinParts, getExtractionPreview } from '../utils/skinPartExtractor';
 import { saveExtractedParts } from '../utils/partsStorage';
-import { PartEditor } from './PartEditor';
+import { FileDropzone } from './extractor/FileDropzone';
+import { ExtractedPartsList } from './extractor/ExtractedPartsList';
 
-/**
- * data URL을 Blob으로 변환합니다.
- */
 function dataUrlToBlob(dataUrl) {
   const parts = dataUrl.split(',');
   const mime = parts[0].match(/:(.*?);/)[1];
@@ -19,11 +16,8 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([array], { type: mime });
 }
 
-/**
- * 스킨 업로드 → 파츠 분해 → 워드로브에 자동 추가하는 컴포넌트
- */
 export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, openPartEditor, closePartEditor, portalTarget }) {
-  const [status, setStatus] = useState('idle'); // idle | loading | success | error
+  const [status, setStatus] = useState('idle');
   const [editingPartId, setEditingPartId] = useState(null);
   const [preview, setPreview] = useState(null);
   const [extractionResult, setExtractionResult] = useState(null);
@@ -48,14 +42,11 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
       const previewUrl = URL.createObjectURL(file);
       setPreview(previewUrl);
 
-      // 파츠 추출 실행
       const result = await extractSkinParts(file);
       const previewData = getExtractionPreview(result);
 
-      // 전체 결과 저장
       setExtractionResult({ ...result, previewData });
 
-      // 파일명에서 확장자를 제거하여 스킨 이름으로 사용
       const skinName = file.name.replace(/\.[^.]+$/, '') || `skin_${Date.now()}`;
       setSavedSkinName(skinName);
 
@@ -77,15 +68,12 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
     }
   }, [onPartsExtracted]);
 
-  // PartEditor 편집 완료 후 대시보드 복귀
   const handleEditorClose = useCallback(() => {
     setStatus('loading');
     setEditingPartId(null);
     
-    // UI 렌더링 딜레이를 위해 약간 지연
     setTimeout(() => {
       try {
-        // 이미 캔버스가 업데이트 되었으므로 previewData만 재생성
         const previewData = getExtractionPreview(extractionResult);
         setExtractionResult(prev => ({ ...prev, previewData }));
 
@@ -126,7 +114,6 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
     e.stopPropagation();
   }, []);
 
-  // Blob URL 방식으로 다운로드 (파일명 정상 적용)
   const handleDownloadPart = useCallback((croppedDataUrl, partId) => {
     const blob = dataUrlToBlob(croppedDataUrl);
     const blobUrl = URL.createObjectURL(blob);
@@ -154,63 +141,6 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
     });
   };
 
-  const renderPartsList = (isPortal) => (
-    <div style={{ display: 'grid', gridTemplateColumns: isPortal ? '1fr' : '1fr 1fr', gap: isPortal ? '8px' : '6px' }}>
-      {extractionResult.previewData.map((part) => (
-        <div
-          key={part.partId}
-          style={{
-            display: 'flex', alignItems: 'center', gap: isPortal ? '10px' : '6px',
-            padding: isPortal ? '10px' : '6px', borderRadius: '6px',
-            backgroundColor: 'rgba(0,0,0,0.3)',
-            border: '1px solid rgba(255,255,255,0.05)',
-          }}
-        >
-          <img
-            src={part.croppedDataUrl}
-            alt={part.label}
-            style={{
-              width: isPortal ? '32px' : '24px', height: isPortal ? '32px' : '24px',
-              imageRendering: 'pixelated',
-              borderRadius: '4px',
-              backgroundColor: 'rgba(0,0,0,0.6)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              objectFit: 'contain',
-            }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: isPortal ? '0.85rem' : '0.75rem', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {part.label}
-            </div>
-            <div style={{ fontSize: isPortal ? '0.7rem' : '0.6rem', color: 'var(--text-secondary)', opacity: 0.7 }}>
-              신뢰도: {part.confidence}
-            </div>
-          </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); startEditingPart(part.partId); }}
-            style={{ 
-              padding: isPortal ? '6px 12px' : '4px 8px', borderRadius: '4px', backgroundColor: 'rgba(102, 252, 241, 0.1)', 
-              color: '#66fcf1', fontSize: isPortal ? '0.75rem' : '0.7rem', display: 'flex', alignItems: 'center', gap: '4px', 
-              cursor: 'pointer', border: '1px solid rgba(102, 252, 241, 0.3)', transition: 'all 0.2s' 
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 252, 241, 0.2)'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 252, 241, 0.1)'}
-          >
-            ✏️ 편집
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleDownloadPart(part.dataUrl, part.partId); }}
-            className="btn-icon"
-            style={{ padding: '4px', opacity: 0.6 }}
-            title={`${part.label} (64x64 원본) 다운로드`}
-          >
-            <Download size={isPortal ? 16 : 12} />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <h3 style={{ textAlign: 'center', marginTop: 0, marginBottom: '4px', color: 'var(--primary)' }}>
@@ -220,73 +150,18 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
         스킨 파일을 업로드하면 부위별로 자동 분리<br />후 커스텀 선택지에 추가됩니다.
       </p>
 
-      {/* 드래그 앤 드롭 영역 */}
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onClick={() => fileInputRef.current?.click()}
-        style={{
-          border: '2px dashed rgba(102, 252, 241, 0.3)',
-          borderRadius: '12px',
-          padding: '24px 16px',
-          textAlign: 'center',
-          cursor: 'pointer',
-          transition: 'all 0.3s ease',
-          backgroundColor: 'rgba(102, 252, 241, 0.03)',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = 'rgba(102, 252, 241, 0.6)';
-          e.currentTarget.style.backgroundColor = 'rgba(102, 252, 241, 0.08)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = 'rgba(102, 252, 241, 0.3)';
-          e.currentTarget.style.backgroundColor = 'rgba(102, 252, 241, 0.03)';
-        }}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/png"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
-        
-        {status === 'loading' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--primary)' }} />
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>분석 중...</span>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-            <Upload size={28} style={{ color: 'var(--primary)', opacity: 0.7 }} />
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              PNG 스킨 파일을 드래그하거나 클릭
-            </span>
-            <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>
-              64×64 또는 64×32 형식 지원
-            </span>
-          </div>
-        )}
-      </div>
+      <FileDropzone 
+        fileInputRef={fileInputRef}
+        handleDrop={handleDrop}
+        handleDragOver={handleDragOver}
+        handleFileSelect={handleFileSelect}
+        status={status}
+        errorMessage={errorMessage}
+      />
 
-      {/* 에러 메시지 */}
-      {status === 'error' && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-          padding: '10px 12px', borderRadius: '8px',
-          backgroundColor: 'rgba(255, 80, 80, 0.15)',
-          border: '1px solid rgba(255, 80, 80, 0.3)',
-        }}>
-          <AlertCircle size={16} style={{ color: '#ff5050', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.8rem', color: '#ff8080' }}>{errorMessage}</span>
-        </div>
-      )}
-
-      {/* 성공: 분석 결과 */}
       {status === 'success' && extractionResult && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-          {/* 성공 배너 */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '10px',
             padding: '12px', borderRadius: '10px',
@@ -311,7 +186,6 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
             )}
           </div>
 
-          {/* 커스텀 탭으로 이동 버튼 */}
           {onSwitchToWardrobe && (
             <button
               onClick={onSwitchToWardrobe}
@@ -334,7 +208,6 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
             </button>
           )}
 
-          {/* 스킨 분석 통계 */}
           <div style={{
             padding: '8px 12px', borderRadius: '8px',
             backgroundColor: 'rgba(0,0,0,0.2)',
@@ -361,18 +234,13 @@ export function SkinPartExtractorUI({ onPartsExtracted, onSwitchToWardrobe, open
             </div>
           </div>
 
-          {/* 추출된 파츠 목록 (14종) */}
-          {portalTarget ? createPortal(
-            renderPartsList(true),
-            portalTarget
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <h4 style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
-                추출된 파츠 ({extractionResult.previewData.length}개)
-              </h4>
-              {renderPartsList(false)}
-            </div>
-          )}
+          <ExtractedPartsList 
+            isPortal={!!portalTarget}
+            extractionResult={extractionResult}
+            startEditingPart={startEditingPart}
+            handleDownloadPart={handleDownloadPart}
+            portalTarget={portalTarget}
+          />
         </div>
       )}
 
